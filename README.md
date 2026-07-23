@@ -1,42 +1,76 @@
 # ActionKit
 
-ActionKit is a GitHub CLI extension for finding, checking, and validating GitHub Actions.
+ActionKit is a GitHub CLI extension for finding GitHub Actions and keeping workflow files current, valid, and safe.
 
-The Go port is under development. It can look up action versions, search for actions, audit workflows with zizmor, and validate workflow syntax:
+## Installation
+
+Install the extension from GitHub:
+
+```console
+gh extension install joshuadavidthomas/gh-actionkit
+```
+
+ActionKit uses the GitHub CLI's existing authentication. The `lint` command also requires [zizmor](https://docs.zizmor.sh/installation).
+
+## Commands
+
+| Command | Purpose |
+| --- | --- |
+| `version OWNER/REPO` | Show the latest stable release, major tag, and commit SHAs |
+| `search QUERY` | Find repositories that contain a root Action manifest |
+| `check` | Find outdated Action refs in a repository's workflows |
+| `lint` | Audit workflows with zizmor |
+| `validate` | Validate workflow syntax with the embedded actionlint library |
+
+### Look up a version
 
 ```console
 gh actionkit version actions/checkout
-gh actionkit search "docker build"
-gh actionkit lint
-gh actionkit validate
+gh actionkit version actions/checkout --json
 ```
 
-## Install for development
+### Search for Actions
 
-ActionKit requires the [GitHub CLI](https://cli.github.com/) with an authenticated account and Go 1.25 or newer. The `lint` command also requires [zizmor](https://docs.zizmor.sh/installation).
+```console
+gh actionkit search "docker build"
+gh actionkit search checkout --limit 5
+gh actionkit search checkout --fast --json
+```
+
+ActionKit normally verifies that each result has an `action.yml` or `action.yaml` file. `--fast` skips that check.
+
+### Check a repository
+
+```console
+gh actionkit check
+gh actionkit check --repo ../another-repository --json
+```
+
+`check` exits with status 1 when it finds an update. Unresolved branches and other non-version refs are reported as unknown.
+
+### Lint and validate workflows
+
+```console
+gh actionkit lint --pedantic
+gh actionkit validate
+gh actionkit validate --json
+```
+
+`lint` preserves zizmor's exit status. `validate` exits with status 1 when actionlint finds a problem.
+
+## Development
+
+ActionKit requires Go 1.25 or newer. Build and install the local checkout as a GitHub CLI extension:
 
 ```console
 just install
 ```
 
-Run the extension from any directory:
-
-```console
-gh actionkit version actions/checkout
-gh actionkit version actions/checkout --json
-gh actionkit search checkout --limit 5
-gh actionkit lint --pedantic
-gh actionkit validate --json
-```
-
-## Planned commands
-
-The remaining Python command, `check`, will move into ActionKit as a native Go implementation.
-
-## Development
+Run all checks:
 
 ```console
 just check
+actionlint
 ```
 
 ## License

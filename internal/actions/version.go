@@ -2,6 +2,7 @@ package actions
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -10,6 +11,7 @@ import (
 )
 
 var majorTagPattern = regexp.MustCompile(`^(v?\d+)`)
+var ErrNoVersions = errors.New("no releases or tags found")
 
 type Repository struct {
 	Owner string
@@ -59,7 +61,7 @@ func (s VersionService) Lookup(ctx context.Context, action string) (VersionInfo,
 		latestTag, found = latestStableTag(tags)
 	}
 	if !found {
-		return VersionInfo{}, fmt.Errorf("no releases or tags found for %s", action)
+		return VersionInfo{}, fmt.Errorf("%w for %s", ErrNoVersions, action)
 	}
 
 	majorTag := latestTag

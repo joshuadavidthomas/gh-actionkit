@@ -72,10 +72,10 @@ func (c *Client) SearchRepositories(ctx context.Context, query string, limit int
 	}
 	var response struct {
 		Items []struct {
-			FullName        string `json:"full_name"`
-			Description     string `json:"description"`
-			StargazersCount int    `json:"stargazers_count"`
-			HTMLURL         string `json:"html_url"`
+			FullName        string  `json:"full_name"`
+			Description     *string `json:"description"`
+			StargazersCount int     `json:"stargazers_count"`
+			HTMLURL         string  `json:"html_url"`
 		} `json:"items"`
 	}
 	if err := c.get(ctx, "search/repositories?"+parameters.Encode(), &response); err != nil {

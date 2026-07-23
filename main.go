@@ -11,6 +11,7 @@ import (
 	"github.com/joshuadavidthomas/gh-actionkit/internal/cli"
 	"github.com/joshuadavidthomas/gh-actionkit/internal/githubapi"
 	"github.com/joshuadavidthomas/gh-actionkit/internal/tools"
+	"github.com/joshuadavidthomas/gh-actionkit/internal/workflow"
 )
 
 func main() {
@@ -35,6 +36,22 @@ func main() {
 		ValidateWorkflows: func(repository string, outputJSON bool, stdout, stderr io.Writer) (int, int, error) {
 			result, err := actionlint.Validate(repository, outputJSON, stdout, stderr)
 			return result.Files, result.Findings, err
+		},
+		CheckActions: func(ctx context.Context, repository string) (actions.CheckReport, error) {
+			scan, err := workflow.ScanRepository(repository)
+			if err != nil {
+				return actions.CheckReport{}, err
+			}
+			report := actions.CheckReport{WorkflowFiles: scan.Files, Uses: len(scan.Uses), Results: []actions.CheckResult{}}
+			if len(scan.Uses) == 0 {
+				return report, nil
+			}
+			client, err := githubapi.New()
+			if err != nil {
+				return actions.CheckReport{}, fmt.Errorf("connect to GitHub: %w", err)
+			}
+			report.Results, err = actions.NewCheckService(client).Check(ctx, scan.Uses)
+			return report, err
 		},
 	}
 

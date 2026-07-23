@@ -18,6 +18,7 @@ type Dependencies struct {
 	SearchActions     ActionSearch
 	LintWorkflows     WorkflowLint
 	ValidateWorkflows WorkflowValidate
+	CheckActions      ActionCheck
 }
 
 func NewRootCommand(stdout, stderr io.Writer, dependencies Dependencies) *cobra.Command {
@@ -34,6 +35,7 @@ func NewRootCommand(stdout, stderr io.Writer, dependencies Dependencies) *cobra.
 		newSearchCommand(dependencies.SearchActions),
 		newLintCommand(dependencies.LintWorkflows),
 		newValidateCommand(dependencies.ValidateWorkflows),
+		newCheckCommand(dependencies.CheckActions),
 	)
 	return command
 }
@@ -86,8 +88,8 @@ func newSearchCommand(search ActionSearch) *cobra.Command {
 			}
 			for _, result := range results {
 				fmt.Fprintf(command.OutOrStdout(), "%s (★ %s)\n", result.Action, formatStars(result.Stars))
-				if result.Description != "" {
-					fmt.Fprintf(command.OutOrStdout(), "  %s\n", result.Description)
+				if result.Description != nil && *result.Description != "" {
+					fmt.Fprintf(command.OutOrStdout(), "  %s\n", *result.Description)
 				}
 				fmt.Fprintln(command.OutOrStdout())
 			}

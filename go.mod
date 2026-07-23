@@ -8,6 +8,7 @@ require (
 	github.com/cli/safeexec v1.0.0
 	github.com/rhysd/actionlint v1.7.12
 	github.com/spf13/cobra v1.10.2
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
@@ -34,5 +35,4 @@ require (
 	golang.org/x/sys v0.42.0 // indirect
 	golang.org/x/term v0.30.0 // indirect
 	golang.org/x/text v0.23.0 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

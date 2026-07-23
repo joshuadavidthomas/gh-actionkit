@@ -12,10 +12,10 @@ const searchCandidates = 100
 var actionManifestNames = []string{"action.yml", "action.yaml"}
 
 type SearchResult struct {
-	Action      string `json:"action"`
-	Description string `json:"description"`
-	Stars       int    `json:"stars"`
-	URL         string `json:"url"`
+	Action      string  `json:"action"`
+	Description *string `json:"description"`
+	Stars       int     `json:"stars"`
+	URL         string  `json:"url"`
 }
 
 type SearchSource interface {
