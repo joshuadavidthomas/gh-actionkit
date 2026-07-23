@@ -42,13 +42,24 @@ func newCheckCommandWithCheck(check actionCheck) *cobra.Command {
 	command := &cobra.Command{
 		Use:   "check",
 		Short: "Check workflow action refs for newer versions",
-		Args:  cobra.NoArgs,
+		Long:  "Scan workflow files, resolve each remote Action ref, and compare it with the latest stable release or tag.",
+		Example: "  gh actionkit check\n" +
+			"  gh actionkit check --repo ../another-repository --json",
+		Args: cobra.NoArgs,
 		RunE: func(command *cobra.Command, _ []string) error {
 			repositoryPath, err := resolveRepository(repository)
 			if err != nil {
 				return err
 			}
+			indicator := startCommandSpinner(
+				command.OutOrStdout(),
+				command.ErrOrStderr(),
+				outputJSON,
+				"Checking action versions...",
+			)
+			defer indicator.Stop()
 			report, err := check(command.Context(), repositoryPath)
+			indicator.Stop()
 			if err != nil {
 				return err
 			}

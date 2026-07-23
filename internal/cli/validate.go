@@ -26,7 +26,10 @@ func newValidateCommandWithValidate(validate workflowValidate) *cobra.Command {
 	command := &cobra.Command{
 		Use:   "validate",
 		Short: "Validate GitHub Actions workflow syntax with actionlint",
-		Args:  cobra.NoArgs,
+		Long:  "Validate workflow syntax, expressions, context availability, and Action inputs with the embedded actionlint library.",
+		Example: "  gh actionkit validate\n" +
+			"  gh actionkit validate --json",
+		Args: cobra.NoArgs,
 		RunE: func(command *cobra.Command, _ []string) error {
 			repositoryPath, err := resolveRepository(repository)
 			if err != nil {

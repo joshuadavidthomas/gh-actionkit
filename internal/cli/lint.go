@@ -23,7 +23,10 @@ func newLintCommandWithLint(lint workflowLint) *cobra.Command {
 	command := &cobra.Command{
 		Use:   "lint",
 		Short: "Audit GitHub Actions workflows with zizmor",
-		Args:  cobra.NoArgs,
+		Long:  "Run zizmor security audits against a repository's workflow collection, including stale, vulnerable, and unpinned Action refs.",
+		Example: "  gh actionkit lint\n" +
+			"  gh actionkit lint --pedantic",
+		Args: cobra.NoArgs,
 		RunE: func(command *cobra.Command, _ []string) error {
 			repositoryPath, err := resolveRepository(repository)
 			if err != nil {

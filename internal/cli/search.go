@@ -32,9 +32,24 @@ func newSearchCommandWithSearch(search actionSearch) *cobra.Command {
 	command := &cobra.Command{
 		Use:   "search QUERY",
 		Short: "Search for GitHub Actions",
-		Args:  cobra.ExactArgs(1),
+		Long:  "Search GitHub repositories and verify that each result contains a root Action manifest. Use --fast to skip verification.",
+		Example: "  gh actionkit search checkout\n" +
+			"  gh actionkit search \"docker build\" --fast",
+		Args: cobra.ExactArgs(1),
 		RunE: func(command *cobra.Command, args []string) error {
+			label := "Searching GitHub..."
+			if !fast {
+				label = "Searching GitHub and verifying actions..."
+			}
+			indicator := startCommandSpinner(
+				command.OutOrStdout(),
+				command.ErrOrStderr(),
+				outputJSON,
+				label,
+			)
+			defer indicator.Stop()
 			results, err := search(command.Context(), args[0], limit, fast)
+			indicator.Stop()
 			if err != nil {
 				return err
 			}
@@ -59,10 +74,11 @@ func newSearchCommandWithSearch(search actionSearch) *cobra.Command {
 
 func writeSearchResults(output io.Writer, results []actions.SearchResult) error {
 	styles := newOutputStyles(newOutputRenderer(output))
+	actionStyle := styles.action.Bold(true)
 
 	for _, result := range results {
-		details := styles.secondary.Render(fmt.Sprintf("(★ %s)", formatStars(result.Stars)))
-		if _, err := fmt.Fprintf(output, "%s %s\n", styles.action.Render(result.Action), details); err != nil {
+		details := styles.secondary.Render(fmt.Sprintf("(⭐ %s)", formatStars(result.Stars)))
+		if _, err := fmt.Fprintf(output, "%s %s\n", actionStyle.Render(result.Action), details); err != nil {
 			return err
 		}
 		if result.Description != nil && *result.Description != "" {

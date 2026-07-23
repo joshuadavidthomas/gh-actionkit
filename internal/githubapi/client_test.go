@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/cli/go-gh/v2/pkg/api"
@@ -70,6 +71,45 @@ func TestResolveTagReturnsNotFound(t *testing.T) {
 	}
 	if found {
 		t.Fatal("expected missing tag")
+	}
+}
+
+func TestRateLimitErrorSuggestsCheckingAuthentication(t *testing.T) {
+	path := "repos/actions/checkout/releases/latest"
+	headers := http.Header{}
+	headers.Set("X-RateLimit-Remaining", "0")
+	rest := &fakeRESTClient{errors: map[string]error{
+		path: &api.HTTPError{StatusCode: http.StatusForbidden, Headers: headers},
+	}}
+	client := &Client{rest: rest}
+
+	_, _, err := client.LatestRelease(
+		context.Background(),
+		actions.Repository{Owner: "actions", Name: "checkout"},
+	)
+	if err == nil || !strings.Contains(err.Error(), "gh auth status") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestSecondaryRateLimitSuggestsWhenToRetry(t *testing.T) {
+	path := "repos/actions/checkout/releases/latest"
+	headers := http.Header{}
+	headers.Set("Retry-After", "60")
+	rest := &fakeRESTClient{errors: map[string]error{
+		path: &api.HTTPError{StatusCode: http.StatusForbidden, Headers: headers},
+	}}
+	client := &Client{rest: rest}
+
+	_, _, err := client.LatestRelease(
+		context.Background(),
+		actions.Repository{Owner: "actions", Name: "checkout"},
+	)
+	if err == nil || !strings.Contains(err.Error(), "retry after 60 seconds") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if strings.Contains(err.Error(), "gh auth status") {
+		t.Fatalf("secondary limit gave authentication advice: %v", err)
 	}
 }
 

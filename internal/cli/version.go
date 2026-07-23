@@ -30,9 +30,20 @@ func newVersionCommandWithLookup(lookup versionLookup) *cobra.Command {
 	command := &cobra.Command{
 		Use:   "version OWNER/REPO",
 		Short: "Show the latest stable version of a GitHub Action",
-		Args:  cobra.ExactArgs(1),
+		Long:  "Show the latest stable release, major tag, and commit SHAs for pinning a GitHub Action.",
+		Example: "  gh actionkit version actions/checkout\n" +
+			"  gh actionkit version actions/checkout --json",
+		Args: cobra.ExactArgs(1),
 		RunE: func(command *cobra.Command, args []string) error {
+			indicator := startCommandSpinner(
+				command.OutOrStdout(),
+				command.ErrOrStderr(),
+				outputJSON,
+				"Fetching action version...",
+			)
+			defer indicator.Stop()
 			info, err := lookup(command.Context(), args[0])
+			indicator.Stop()
 			if err != nil {
 				return err
 			}

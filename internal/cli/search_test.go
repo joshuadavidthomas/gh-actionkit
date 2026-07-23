@@ -44,7 +44,7 @@ func TestSearchForwardsOptions(t *testing.T) {
 	if err := command.Execute(); err != nil {
 		t.Fatal(err)
 	}
-	if stdout.String() != "docker/build-push-action (★ 7.1k)\n\n" {
+	if stdout.String() != "docker/build-push-action (⭐ 7.1k)\n\n" {
 		t.Fatalf("unexpected output: %q", stdout.String())
 	}
 }

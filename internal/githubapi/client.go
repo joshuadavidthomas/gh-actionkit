@@ -146,7 +146,11 @@ type gitObject struct {
 }
 
 func (c *Client) get(ctx context.Context, path string, response interface{}) error {
-	return c.rest.DoWithContext(ctx, http.MethodGet, path, nil, response)
+	err := c.rest.DoWithContext(ctx, http.MethodGet, path, nil, response)
+	if advice, limited := rateLimitAdvice(err); limited {
+		return fmt.Errorf("%s: %w", advice, err)
+	}
+	return err
 }
 
 func repositoryPath(repository actions.Repository) string {
@@ -156,4 +160,21 @@ func repositoryPath(repository actions.Repository) string {
 func isNotFound(err error) bool {
 	var httpError *api.HTTPError
 	return errors.As(err, &httpError) && httpError.StatusCode == http.StatusNotFound
+}
+
+func rateLimitAdvice(err error) (string, bool) {
+	var httpError *api.HTTPError
+	if !errors.As(err, &httpError) {
+		return "", false
+	}
+	if retryAfter := httpError.Headers.Get("Retry-After"); retryAfter != "" {
+		return "GitHub API rate limited; retry after " + retryAfter + " seconds", true
+	}
+	if httpError.StatusCode == http.StatusTooManyRequests {
+		return "GitHub API rate limited; retry later", true
+	}
+	if httpError.StatusCode == http.StatusForbidden && httpError.Headers.Get("X-RateLimit-Remaining") == "0" {
+		return "GitHub API rate limited; run `gh auth status` to check authentication", true
+	}
+	return "", false
 }
