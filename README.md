@@ -1,6 +1,6 @@
-# ActionKit
+# gh-actionkit
 
-ActionKit is a GitHub CLI extension for finding GitHub Actions and keeping workflow files current, valid, and safe.
+gh-actionkit is a GitHub CLI extension for finding GitHub Actions and keeping workflow files current, valid, and safe.
 
 ## Installation
 
@@ -10,7 +10,7 @@ Install the extension from GitHub:
 gh extension install joshuadavidthomas/gh-actionkit
 ```
 
-ActionKit uses the GitHub CLI's existing authentication. The `lint` command also requires [zizmor](https://docs.zizmor.sh/installation).
+gh-actionkit uses the GitHub CLI's existing authentication. The `lint` command also requires [zizmor](https://docs.zizmor.sh/installation) (either the official binary or using [`uvx`](https//astral.sh/uv)).
 
 ## Commands
 
@@ -60,7 +60,7 @@ gh actionkit validate --json
 
 ## Development
 
-ActionKit requires Go 1.25 or newer. Install the development tools declared in `mise.toml`, then build and install the local checkout as a GitHub CLI extension:
+gh-actionkit requires Go 1.25 or newer. Install the development tools declared in `mise.toml`, then build and install the local checkout as a GitHub CLI extension:
 
 ```console
 mise install
