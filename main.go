@@ -2,15 +2,18 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 
 	"github.com/joshuadavidthomas/gh-actionkit/internal/actions"
 	"github.com/joshuadavidthomas/gh-actionkit/internal/cli"
 	"github.com/joshuadavidthomas/gh-actionkit/internal/githubapi"
+	"github.com/joshuadavidthomas/gh-actionkit/internal/tools"
 )
 
 func main() {
+	zizmor := tools.NewZizmor()
 	dependencies := cli.Dependencies{
 		LookupVersion: func(ctx context.Context, action string) (actions.VersionInfo, error) {
 			client, err := githubapi.New()
@@ -26,10 +29,18 @@ func main() {
 			}
 			return actions.NewSearchService(client).Search(ctx, query, limit, fast)
 		},
+		LintWorkflows: zizmor.Lint,
 	}
 
 	if err := cli.NewRootCommand(os.Stdout, os.Stderr, dependencies).Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(2)
+		exitCode := 2
+		var statusError interface{ ExitCode() int }
+		if errors.As(err, &statusError) {
+			exitCode = statusError.ExitCode()
+		}
+		if err.Error() != "" {
+			fmt.Fprintln(os.Stderr, err)
+		}
+		os.Exit(exitCode)
 	}
 }
