@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"os/exec"
 	"reflect"
 	"testing"
 )
@@ -48,16 +49,74 @@ func TestZizmorBuildsCommandAndPreservesExitCode(t *testing.T) {
 	}
 }
 
-func TestZizmorReportsMissingExecutable(t *testing.T) {
+func TestZizmorFallsBackToUVX(t *testing.T) {
+	runner := &recordingRunner{}
+	var lookups []string
+	zizmor := Zizmor{
+		runner: runner,
+		lookPath: func(name string) (string, error) {
+			lookups = append(lookups, name)
+			if name == "uvx" {
+				return "/usr/bin/uvx", nil
+			}
+			return "", exec.ErrNotFound
+		},
+	}
+
+	exitCode, err := zizmor.Lint(context.Background(), "/repo", false, false, io.Discard, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if exitCode != 0 {
+		t.Fatalf("got exit code %d", exitCode)
+	}
+	if !reflect.DeepEqual(lookups, []string{"zizmor", "uvx"}) {
+		t.Fatalf("got executable lookups %#v", lookups)
+	}
+	if runner.command.Path != "/usr/bin/uvx" {
+		t.Fatalf("got command path %q", runner.command.Path)
+	}
+	wantArgs := []string{"zizmor", "--collect=workflows", "--no-progress", "."}
+	if !reflect.DeepEqual(runner.command.Args, wantArgs) {
+		t.Fatalf("got arguments %#v", runner.command.Args)
+	}
+}
+
+func TestZizmorReportsMissingExecutableAndFallback(t *testing.T) {
+	var lookups []string
 	zizmor := Zizmor{
 		runner: &recordingRunner{},
-		lookPath: func(string) (string, error) {
-			return "", errors.New("missing")
+		lookPath: func(name string) (string, error) {
+			lookups = append(lookups, name)
+			return "", exec.ErrNotFound
 		},
 	}
 
 	_, err := zizmor.Lint(context.Background(), "/repo", false, false, io.Discard, io.Discard)
 	if err == nil {
 		t.Fatal("expected an error")
+	}
+	if !reflect.DeepEqual(lookups, []string{"zizmor", "uvx"}) {
+		t.Fatalf("got executable lookups %#v", lookups)
+	}
+}
+
+func TestZizmorDoesNotHideLookupErrors(t *testing.T) {
+	lookupErr := errors.New("permission denied")
+	var lookups []string
+	zizmor := Zizmor{
+		runner: &recordingRunner{},
+		lookPath: func(name string) (string, error) {
+			lookups = append(lookups, name)
+			return "", lookupErr
+		},
+	}
+
+	_, err := zizmor.Lint(context.Background(), "/repo", false, false, io.Discard, io.Discard)
+	if !errors.Is(err, lookupErr) {
+		t.Fatalf("got error %v", err)
+	}
+	if !reflect.DeepEqual(lookups, []string{"zizmor"}) {
+		t.Fatalf("got executable lookups %#v", lookups)
 	}
 }

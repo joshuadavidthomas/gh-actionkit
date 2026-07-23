@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os/exec"
@@ -49,8 +50,19 @@ func (z Zizmor) Lint(
 	stderr io.Writer,
 ) (int, error) {
 	path, err := z.lookPath("zizmor")
+	useUVX := false
 	if err != nil {
-		return 0, fmt.Errorf("zizmor not found: install it from https://docs.zizmor.sh/installation: %w", err)
+		if !errors.Is(err, exec.ErrNotFound) {
+			return 0, fmt.Errorf("find zizmor executable: %w", err)
+		}
+		path, err = z.lookPath("uvx")
+		if err != nil {
+			return 0, fmt.Errorf(
+				"zizmor not found and uvx fallback unavailable: install zizmor from https://docs.zizmor.sh/installation: %w",
+				err,
+			)
+		}
+		useUVX = true
 	}
 
 	arguments := []string{"--collect=workflows", "--no-progress"}
@@ -61,6 +73,9 @@ func (z Zizmor) Lint(
 		arguments = append(arguments, "--pedantic")
 	}
 	arguments = append(arguments, ".")
+	if useUVX {
+		arguments = append([]string{"zizmor"}, arguments...)
+	}
 
 	err = z.runner.Run(ctx, Command{
 		Path:   path,
