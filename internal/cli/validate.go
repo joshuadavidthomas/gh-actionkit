@@ -36,8 +36,8 @@ func newValidateCommand(validate WorkflowValidate) *cobra.Command {
 				if outputJSON {
 					output = command.ErrOrStderr()
 				}
-				fmt.Fprintln(output, "No workflow files found in .github/workflows")
-				return nil
+				_, err := fmt.Fprintln(output, "No workflow files found in .github/workflows")
+				return err
 			}
 			if findings > 0 {
 				return StatusError{Code: 1}

@@ -11,6 +11,19 @@ import (
 	"github.com/joshuadavidthomas/gh-actionkit/internal/actions"
 )
 
+func TestRootVersion(t *testing.T) {
+	var stdout bytes.Buffer
+	command := NewRootCommand(&stdout, &bytes.Buffer{}, Dependencies{Version: "v1.2.3"})
+	command.SetArgs([]string{"--version"})
+
+	if err := command.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if stdout.String() != "actionkit version v1.2.3\n" {
+		t.Fatalf("unexpected version output: %q", stdout.String())
+	}
+}
+
 func TestVersionJSON(t *testing.T) {
 	majorSHA := "major-sha"
 	latestSHA := "latest-sha"

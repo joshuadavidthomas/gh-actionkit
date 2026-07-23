@@ -60,9 +60,10 @@ gh actionkit validate --json
 
 ## Development
 
-ActionKit requires Go 1.25 or newer. Build and install the local checkout as a GitHub CLI extension:
+ActionKit requires Go 1.25 or newer. Install the development tools declared in `mise.toml`, then build and install the local checkout as a GitHub CLI extension:
 
 ```console
+mise install
 just install
 ```
 
@@ -72,6 +73,12 @@ Run all checks:
 just check
 actionlint
 ```
+
+Other development commands include `just coverage`, `just fmt`, `just run -- --help`, and `just tidy`.
+
+## Releasing
+
+See [`docs/releasing.md`](docs/releasing.md) for the tag-and-publish workflow.
 
 ## License
 

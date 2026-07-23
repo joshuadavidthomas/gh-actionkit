@@ -2,22 +2,33 @@ set unstable := true
 
 [private]
 default:
-    @just --list
+    @just --list --list-submodules
 
-fmt:
-    gofmt -w .
+build *ARGS:
+    go build {{ ARGS }} -o gh-actionkit .
 
-test:
-    go test -race ./...
+coverage *ARGS:
+    go test ./... -race -cover {{ ARGS }}
+
+fmt *ARGS='.':
+    gofmt -w {{ ARGS }}
+
+lint *ARGS:
+    golangci-lint run {{ ARGS }}
+
+run *ARGS:
+    go run . {{ ARGS }}
+
+test *ARGS:
+    go test ./... -race {{ ARGS }}
+
+tidy:
+    go mod tidy
 
 vet:
     go vet ./...
 
-check: test vet
+check: test lint vet
 
-build:
-    go build -o dist/gh-actionkit .
-
-install:
-    go build -o gh-actionkit .
+install: build
     gh extension install .

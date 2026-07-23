@@ -14,6 +14,7 @@ type VersionLookup func(context.Context, string) (actions.VersionInfo, error)
 type ActionSearch func(context.Context, string, int, bool) ([]actions.SearchResult, error)
 
 type Dependencies struct {
+	Version           string
 	LookupVersion     VersionLookup
 	SearchActions     ActionSearch
 	LintWorkflows     WorkflowLint
@@ -25,6 +26,7 @@ func NewRootCommand(stdout, stderr io.Writer, dependencies Dependencies) *cobra.
 	command := &cobra.Command{
 		Use:           "actionkit",
 		Short:         "Find, check, and validate GitHub Actions",
+		Version:       dependencies.Version,
 		SilenceErrors: true,
 		SilenceUsage:  true,
 	}
@@ -56,8 +58,7 @@ func newVersionCommand(lookup VersionLookup) *cobra.Command {
 				encoder.SetIndent("", "  ")
 				return encoder.Encode(info)
 			}
-			writeVersion(command.OutOrStdout(), info)
-			return nil
+			return writeVersion(command.OutOrStdout(), info)
 		},
 	}
 	command.Flags().BoolVar(&outputJSON, "json", false, "output JSON")
@@ -82,16 +83,23 @@ func newSearchCommand(search ActionSearch) *cobra.Command {
 				encoder.SetIndent("", "  ")
 				return encoder.Encode(results)
 			}
+			output := command.OutOrStdout()
 			if len(results) == 0 {
-				fmt.Fprintf(command.OutOrStdout(), "No actions found for %q\n", args[0])
-				return nil
+				_, err := fmt.Fprintf(output, "No actions found for %q\n", args[0])
+				return err
 			}
 			for _, result := range results {
-				fmt.Fprintf(command.OutOrStdout(), "%s (★ %s)\n", result.Action, formatStars(result.Stars))
-				if result.Description != nil && *result.Description != "" {
-					fmt.Fprintf(command.OutOrStdout(), "  %s\n", *result.Description)
+				if _, err := fmt.Fprintf(output, "%s (★ %s)\n", result.Action, formatStars(result.Stars)); err != nil {
+					return err
 				}
-				fmt.Fprintln(command.OutOrStdout())
+				if result.Description != nil && *result.Description != "" {
+					if _, err := fmt.Fprintf(output, "  %s\n", *result.Description); err != nil {
+						return err
+					}
+				}
+				if _, err := fmt.Fprintln(output); err != nil {
+					return err
+				}
 			}
 			return nil
 		},
@@ -109,14 +117,27 @@ func formatStars(stars int) string {
 	return fmt.Sprint(stars)
 }
 
-func writeVersion(output io.Writer, info actions.VersionInfo) {
-	fmt.Fprintln(output, info.Action)
-	fmt.Fprintln(output, "  major")
-	fmt.Fprintf(output, "    tag: %s\n", info.Major.Tag)
-	fmt.Fprintf(output, "    sha: %s\n", formatSHA(info.Major.SHA))
-	fmt.Fprintln(output, "  latest")
-	fmt.Fprintf(output, "    tag: %s\n", info.Latest.Tag)
-	fmt.Fprintf(output, "    sha: %s\n", formatSHA(info.Latest.SHA))
+func writeVersion(output io.Writer, info actions.VersionInfo) error {
+	if _, err := fmt.Fprintln(output, info.Action); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintln(output, "  major"); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(output, "    tag: %s\n", info.Major.Tag); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(output, "    sha: %s\n", formatSHA(info.Major.SHA)); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintln(output, "  latest"); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(output, "    tag: %s\n", info.Latest.Tag); err != nil {
+		return err
+	}
+	_, err := fmt.Fprintf(output, "    sha: %s\n", formatSHA(info.Latest.SHA))
+	return err
 }
 
 func formatSHA(sha *string) string {

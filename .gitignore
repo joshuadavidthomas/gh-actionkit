@@ -1,2 +1,16 @@
+# Created by https://www.toptal.com/developers/gitignore/api/go
+# Edit at https://www.toptal.com/developers/gitignore?templates=go
+
+### Go ###
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+go.work
+
+.env
 /dist/
 /gh-actionkit

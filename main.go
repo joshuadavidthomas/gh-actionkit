@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/joshuadavidthomas/gh-actionkit/internal/actions"
 	"github.com/joshuadavidthomas/gh-actionkit/internal/cli"
@@ -14,10 +16,16 @@ import (
 	"github.com/joshuadavidthomas/gh-actionkit/internal/workflow"
 )
 
+var version = "dev"
+
 func main() {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
 	zizmor := tools.NewZizmor()
 	actionlint := tools.Actionlint{}
 	dependencies := cli.Dependencies{
+		Version: version,
 		LookupVersion: func(ctx context.Context, action string) (actions.VersionInfo, error) {
 			client, err := githubapi.New()
 			if err != nil {
@@ -55,7 +63,7 @@ func main() {
 		},
 	}
 
-	if err := cli.NewRootCommand(os.Stdout, os.Stderr, dependencies).Execute(); err != nil {
+	if err := cli.NewRootCommand(os.Stdout, os.Stderr, dependencies).ExecuteContext(ctx); err != nil {
 		exitCode := 2
 		var statusError interface{ ExitCode() int }
 		if errors.As(err, &statusError) {
