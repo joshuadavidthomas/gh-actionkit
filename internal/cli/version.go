@@ -49,31 +49,36 @@ func newVersionCommandWithLookup(lookup versionLookup) *cobra.Command {
 }
 
 func writeVersion(output io.Writer, info actions.VersionInfo) error {
-	if _, err := fmt.Fprintln(output, info.Action); err != nil {
+	renderer := newOutputRenderer(output)
+	styles := newOutputStyles(renderer)
+	actionStyle := styles.action.Bold(true)
+	sectionStyle := renderer.NewStyle().Bold(true)
+
+	if _, err := fmt.Fprintln(output, actionStyle.Render(info.Action)); err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintln(output, "  major"); err != nil {
+	if _, err := fmt.Fprintf(output, "  %s\n", sectionStyle.Render("major")); err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintf(output, "    tag: %s\n", info.Major.Tag); err != nil {
+	if _, err := fmt.Fprintf(output, "    %s %s\n", styles.secondary.Render("tag:"), info.Major.Tag); err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintf(output, "    sha: %s\n", formatSHA(info.Major.SHA)); err != nil {
+	if _, err := fmt.Fprintf(output, "    %s %s\n", styles.secondary.Render("sha:"), styleSHA(info.Major.SHA, styles)); err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintln(output, "  latest"); err != nil {
+	if _, err := fmt.Fprintf(output, "  %s\n", sectionStyle.Render("latest")); err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintf(output, "    tag: %s\n", info.Latest.Tag); err != nil {
+	if _, err := fmt.Fprintf(output, "    %s %s\n", styles.secondary.Render("tag:"), info.Latest.Tag); err != nil {
 		return err
 	}
-	_, err := fmt.Fprintf(output, "    sha: %s\n", formatSHA(info.Latest.SHA))
+	_, err := fmt.Fprintf(output, "    %s %s\n", styles.secondary.Render("sha:"), styleSHA(info.Latest.SHA, styles))
 	return err
 }
 
-func formatSHA(sha *string) string {
+func styleSHA(sha *string, styles outputStyles) string {
 	if sha == nil {
-		return "unknown"
+		return styles.unknown.Render("unknown")
 	}
 	return *sha
 }

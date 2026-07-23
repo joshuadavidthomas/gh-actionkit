@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"strings"
-	"text/tabwriter"
 
 	"github.com/joshuadavidthomas/gh-actionkit/internal/actions"
 	"github.com/joshuadavidthomas/gh-actionkit/internal/githubapi"
@@ -87,46 +85,6 @@ func newCheckCommandWithCheck(check actionCheck) *cobra.Command {
 }
 
 func writeCheckResults(output io.Writer, results []actions.CheckResult) error {
-	writer := tabwriter.NewWriter(output, 0, 4, 2, ' ', 0)
-	if _, err := fmt.Fprintln(writer, "ACTION\tSTATUS\tWORKFLOWS\tUSED\tMAJOR\tLATEST"); err != nil {
-		return err
-	}
-	for _, result := range results {
-		status := "unknown"
-		if result.UpToDate {
-			status = "up to date"
-		} else if result.UpdateAvailable {
-			status = "update available"
-		}
-		locations := make([]string, 0, len(result.Locations))
-		for _, location := range result.Locations {
-			locations = append(locations, fmt.Sprintf("%s:%d", location.File, location.Line))
-		}
-		if _, err := fmt.Fprintf(
-			writer,
-			"%s\t%s\t%s\t%s\t%s\t%s\n",
-			result.Action,
-			status,
-			strings.Join(locations, ", "),
-			formatCheckVersion(result.Used),
-			formatCheckVersion(result.Major),
-			formatCheckVersion(result.Latest),
-		); err != nil {
-			return err
-		}
-	}
-	return writer.Flush()
-}
-
-func formatCheckVersion(version actions.CheckVersion) string {
-	switch {
-	case version.Tag != nil && version.SHA != nil:
-		return *version.Tag + "@" + *version.SHA
-	case version.Tag != nil:
-		return *version.Tag + "@unknown"
-	case version.SHA != nil:
-		return *version.SHA
-	default:
-		return "unknown"
-	}
+	_, err := fmt.Fprintln(output, renderCheckResults(results, outputWidth(output), outputUsesColor(output)))
+	return err
 }

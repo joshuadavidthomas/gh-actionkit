@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 
 	"github.com/joshuadavidthomas/gh-actionkit/internal/actions"
 	"github.com/joshuadavidthomas/gh-actionkit/internal/githubapi"
@@ -47,26 +48,33 @@ func newSearchCommandWithSearch(search actionSearch) *cobra.Command {
 				_, err := fmt.Fprintf(output, "No actions found for %q\n", args[0])
 				return err
 			}
-			for _, result := range results {
-				if _, err := fmt.Fprintf(output, "%s (★ %s)\n", result.Action, formatStars(result.Stars)); err != nil {
-					return err
-				}
-				if result.Description != nil && *result.Description != "" {
-					if _, err := fmt.Fprintf(output, "  %s\n", *result.Description); err != nil {
-						return err
-					}
-				}
-				if _, err := fmt.Fprintln(output); err != nil {
-					return err
-				}
-			}
-			return nil
+			return writeSearchResults(output, results)
 		},
 	}
 	command.Flags().IntVarP(&limit, "limit", "n", 10, "number of results to return (1-100)")
 	command.Flags().BoolVar(&outputJSON, "json", false, "output JSON")
 	command.Flags().BoolVar(&fast, "fast", false, "skip action manifest verification")
 	return command
+}
+
+func writeSearchResults(output io.Writer, results []actions.SearchResult) error {
+	styles := newOutputStyles(newOutputRenderer(output))
+
+	for _, result := range results {
+		details := styles.secondary.Render(fmt.Sprintf("(★ %s)", formatStars(result.Stars)))
+		if _, err := fmt.Fprintf(output, "%s %s\n", styles.action.Render(result.Action), details); err != nil {
+			return err
+		}
+		if result.Description != nil && *result.Description != "" {
+			if _, err := fmt.Fprintf(output, "  %s\n", *result.Description); err != nil {
+				return err
+			}
+		}
+		if _, err := fmt.Fprintln(output); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func formatStars(stars int) string {
