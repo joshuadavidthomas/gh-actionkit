@@ -39,3 +39,11 @@ jobs:
           generate_attestations: true
           go_build_options: >-
             -ldflags=-s -w -X main.version=${{ github.ref_name }}
+
+      - name: Publish checksums
+        working-directory: dist
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sha256sum -- * > ../checksums.txt
+          gh release upload "$GITHUB_REF_NAME" ../checksums.txt --clobber

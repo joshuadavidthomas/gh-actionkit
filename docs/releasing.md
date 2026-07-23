@@ -4,7 +4,7 @@ ActionKit publishes precompiled GitHub CLI extension binaries with `cli/gh-exten
 
 ## What gets published
 
-Each `v*` tag creates a GitHub release with binaries for supported Linux, macOS, and Windows architectures. The release workflow also creates artifact attestations for every binary.
+Each `v*` tag creates a GitHub release with binaries for supported Linux, macOS, and Windows architectures. The release includes a `checksums.txt` manifest, and the workflow creates an artifact attestation for every binary.
 
 GitHub CLI chooses the correct asset when a user runs:
 
