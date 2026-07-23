@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/joshuadavidthomas/gh-actionkit/internal/actions"
@@ -14,6 +15,7 @@ import (
 
 func main() {
 	zizmor := tools.NewZizmor()
+	actionlint := tools.Actionlint{}
 	dependencies := cli.Dependencies{
 		LookupVersion: func(ctx context.Context, action string) (actions.VersionInfo, error) {
 			client, err := githubapi.New()
@@ -30,6 +32,10 @@ func main() {
 			return actions.NewSearchService(client).Search(ctx, query, limit, fast)
 		},
 		LintWorkflows: zizmor.Lint,
+		ValidateWorkflows: func(repository string, outputJSON bool, stdout, stderr io.Writer) (int, int, error) {
+			result, err := actionlint.Validate(repository, outputJSON, stdout, stderr)
+			return result.Files, result.Findings, err
+		},
 	}
 
 	if err := cli.NewRootCommand(os.Stdout, os.Stderr, dependencies).Execute(); err != nil {

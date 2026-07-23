@@ -14,9 +14,10 @@ type VersionLookup func(context.Context, string) (actions.VersionInfo, error)
 type ActionSearch func(context.Context, string, int, bool) ([]actions.SearchResult, error)
 
 type Dependencies struct {
-	LookupVersion VersionLookup
-	SearchActions ActionSearch
-	LintWorkflows WorkflowLint
+	LookupVersion     VersionLookup
+	SearchActions     ActionSearch
+	LintWorkflows     WorkflowLint
+	ValidateWorkflows WorkflowValidate
 }
 
 func NewRootCommand(stdout, stderr io.Writer, dependencies Dependencies) *cobra.Command {
@@ -32,6 +33,7 @@ func NewRootCommand(stdout, stderr io.Writer, dependencies Dependencies) *cobra.
 		newVersionCommand(dependencies.LookupVersion),
 		newSearchCommand(dependencies.SearchActions),
 		newLintCommand(dependencies.LintWorkflows),
+		newValidateCommand(dependencies.ValidateWorkflows),
 	)
 	return command
 }
