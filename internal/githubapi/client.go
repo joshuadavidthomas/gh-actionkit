@@ -63,6 +63,51 @@ func (c *Client) Tags(ctx context.Context, repository actions.Repository) ([]str
 	}
 }
 
+func (c *Client) SearchRepositories(ctx context.Context, query string, limit int) ([]actions.SearchResult, error) {
+	parameters := url.Values{
+		"q":        {query + " action in:name,description"},
+		"sort":     {"stars"},
+		"order":    {"desc"},
+		"per_page": {fmt.Sprint(limit)},
+	}
+	var response struct {
+		Items []struct {
+			FullName        string `json:"full_name"`
+			Description     string `json:"description"`
+			StargazersCount int    `json:"stargazers_count"`
+			HTMLURL         string `json:"html_url"`
+		} `json:"items"`
+	}
+	if err := c.get(ctx, "search/repositories?"+parameters.Encode(), &response); err != nil {
+		return nil, err
+	}
+
+	results := make([]actions.SearchResult, 0, len(response.Items))
+	for _, item := range response.Items {
+		results = append(results, actions.SearchResult{
+			Action:      item.FullName,
+			Description: item.Description,
+			Stars:       item.StargazersCount,
+			URL:         item.HTMLURL,
+		})
+	}
+	return results, nil
+}
+
+func (c *Client) HasFile(ctx context.Context, repository actions.Repository, name string) (bool, error) {
+	var response struct {
+		Type string `json:"type"`
+	}
+	path := repositoryPath(repository) + "/contents/" + url.PathEscape(name)
+	if err := c.get(ctx, path, &response); err != nil {
+		if isNotFound(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	return response.Type == "file", nil
+}
+
 func (c *Client) ResolveTag(ctx context.Context, repository actions.Repository, tag string) (string, bool, error) {
 	var ref struct {
 		Object gitObject `json:"object"`

@@ -23,7 +23,7 @@ func TestVersionJSON(t *testing.T) {
 	}
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	command := NewRootCommand(&stdout, &stderr, lookup)
+	command := NewRootCommand(&stdout, &stderr, Dependencies{LookupVersion: lookup})
 	command.SetArgs([]string{"version", "actions/checkout", "--json"})
 
 	if err := command.Execute(); err != nil {
@@ -51,7 +51,7 @@ func TestVersionTextShowsUnknownSHA(t *testing.T) {
 		}, nil
 	}
 	var stdout bytes.Buffer
-	command := NewRootCommand(&stdout, &bytes.Buffer{}, lookup)
+	command := NewRootCommand(&stdout, &bytes.Buffer{}, Dependencies{LookupVersion: lookup})
 	command.SetArgs([]string{"version", "owner/action"})
 
 	if err := command.Execute(); err != nil {
@@ -67,7 +67,7 @@ func TestVersionReturnsLookupError(t *testing.T) {
 	lookup := func(context.Context, string) (actions.VersionInfo, error) {
 		return actions.VersionInfo{}, lookupErr
 	}
-	command := NewRootCommand(&bytes.Buffer{}, &bytes.Buffer{}, lookup)
+	command := NewRootCommand(&bytes.Buffer{}, &bytes.Buffer{}, Dependencies{LookupVersion: lookup})
 	command.SetArgs([]string{"version", "owner/action"})
 
 	if err := command.Execute(); !errors.Is(err, lookupErr) {
