@@ -82,4 +82,4 @@ See [`docs/releasing.md`](docs/releasing.md) for the tag-and-publish workflow.
 
 ## License
 
-ActionKit is licensed under the [MIT License](LICENSE).
+gh-actionkit is licensed under the MIT license. See the [`LICENSE`](LICENSE) file for more information.
