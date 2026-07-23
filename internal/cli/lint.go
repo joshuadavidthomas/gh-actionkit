@@ -4,12 +4,17 @@ import (
 	"context"
 	"io"
 
+	"github.com/joshuadavidthomas/gh-actionkit/internal/tools"
 	"github.com/spf13/cobra"
 )
 
-type WorkflowLint func(context.Context, string, bool, bool, io.Writer, io.Writer) (int, error)
+type workflowLint func(context.Context, string, bool, bool, io.Writer, io.Writer) (int, error)
 
-func newLintCommand(lint WorkflowLint) *cobra.Command {
+func newLintCommand() *cobra.Command {
+	return newLintCommandWithLint(tools.NewZizmor().Lint)
+}
+
+func newLintCommandWithLint(lint workflowLint) *cobra.Command {
 	var repository string
 	var outputJSON bool
 	var pedantic bool

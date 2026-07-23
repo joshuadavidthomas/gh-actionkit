@@ -5,15 +5,25 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/joshuadavidthomas/gh-actionkit/internal/actions"
+	"github.com/spf13/cobra"
 )
+
+func commandForTest(command *cobra.Command, stdout, stderr io.Writer, args ...string) *cobra.Command {
+	command.SetOut(stdout)
+	command.SetErr(stderr)
+	command.SetArgs(args)
+	return command
+}
 
 func TestRootVersion(t *testing.T) {
 	var stdout bytes.Buffer
-	command := NewRootCommand(&stdout, &bytes.Buffer{}, Dependencies{Version: "v1.2.3"})
+	command := NewRootCommand("v1.2.3", &stdout, &bytes.Buffer{})
 	command.SetArgs([]string{"--version"})
 
 	if err := command.Execute(); err != nil {
@@ -21,6 +31,19 @@ func TestRootVersion(t *testing.T) {
 	}
 	if stdout.String() != "actionkit version v1.2.3\n" {
 		t.Fatalf("unexpected version output: %q", stdout.String())
+	}
+}
+
+func TestRootRegistersCommands(t *testing.T) {
+	command := NewRootCommand("dev", &bytes.Buffer{}, &bytes.Buffer{})
+	got := make([]string, 0, len(command.Commands()))
+	for _, subcommand := range command.Commands() {
+		got = append(got, subcommand.Name())
+	}
+	slices.Sort(got)
+	want := []string{"check", "lint", "search", "validate", "version"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("commands = %v, want %v", got, want)
 	}
 }
 
@@ -36,8 +59,13 @@ func TestVersionJSON(t *testing.T) {
 	}
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	command := NewRootCommand(&stdout, &stderr, Dependencies{LookupVersion: lookup})
-	command.SetArgs([]string{"version", "actions/checkout", "--json"})
+	command := commandForTest(
+		newVersionCommandWithLookup(lookup),
+		&stdout,
+		&stderr,
+		"actions/checkout",
+		"--json",
+	)
 
 	if err := command.Execute(); err != nil {
 		t.Fatal(err)
@@ -64,8 +92,7 @@ func TestVersionTextShowsUnknownSHA(t *testing.T) {
 		}, nil
 	}
 	var stdout bytes.Buffer
-	command := NewRootCommand(&stdout, &bytes.Buffer{}, Dependencies{LookupVersion: lookup})
-	command.SetArgs([]string{"version", "owner/action"})
+	command := commandForTest(newVersionCommandWithLookup(lookup), &stdout, &bytes.Buffer{}, "owner/action")
 
 	if err := command.Execute(); err != nil {
 		t.Fatal(err)
@@ -80,8 +107,12 @@ func TestVersionReturnsLookupError(t *testing.T) {
 	lookup := func(context.Context, string) (actions.VersionInfo, error) {
 		return actions.VersionInfo{}, lookupErr
 	}
-	command := NewRootCommand(&bytes.Buffer{}, &bytes.Buffer{}, Dependencies{LookupVersion: lookup})
-	command.SetArgs([]string{"version", "owner/action"})
+	command := commandForTest(
+		newVersionCommandWithLookup(lookup),
+		&bytes.Buffer{},
+		&bytes.Buffer{},
+		"owner/action",
+	)
 
 	if err := command.Execute(); !errors.Is(err, lookupErr) {
 		t.Fatalf("expected lookup error, got %v", err)

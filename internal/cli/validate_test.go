@@ -14,8 +14,14 @@ func TestValidateReturnsFindingStatus(t *testing.T) {
 		}
 		return 2, 3, nil
 	}
-	command := NewRootCommand(&bytes.Buffer{}, &bytes.Buffer{}, Dependencies{ValidateWorkflows: validate})
-	command.SetArgs([]string{"validate", "-C", t.TempDir(), "--json"})
+	command := commandForTest(
+		newValidateCommandWithValidate(validate),
+		&bytes.Buffer{},
+		&bytes.Buffer{},
+		"-C",
+		t.TempDir(),
+		"--json",
+	)
 
 	err := command.Execute()
 	var statusError StatusError
@@ -30,8 +36,14 @@ func TestValidateReportsNoWorkflowsWithoutPollutingJSON(t *testing.T) {
 	}
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	command := NewRootCommand(&stdout, &stderr, Dependencies{ValidateWorkflows: validate})
-	command.SetArgs([]string{"validate", "-C", t.TempDir(), "--json"})
+	command := commandForTest(
+		newValidateCommandWithValidate(validate),
+		&stdout,
+		&stderr,
+		"-C",
+		t.TempDir(),
+		"--json",
+	)
 
 	if err := command.Execute(); err != nil {
 		t.Fatal(err)

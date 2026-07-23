@@ -13,8 +13,7 @@ func TestSearchJSONUsesEmptyArray(t *testing.T) {
 		return []actions.SearchResult{}, nil
 	}
 	var stdout bytes.Buffer
-	command := NewRootCommand(&stdout, &bytes.Buffer{}, Dependencies{SearchActions: search})
-	command.SetArgs([]string{"search", "missing", "--json"})
+	command := commandForTest(newSearchCommandWithSearch(search), &stdout, &bytes.Buffer{}, "missing", "--json")
 
 	if err := command.Execute(); err != nil {
 		t.Fatal(err)
@@ -32,8 +31,15 @@ func TestSearchForwardsOptions(t *testing.T) {
 		return []actions.SearchResult{{Action: "docker/build-push-action", Stars: 7100}}, nil
 	}
 	var stdout bytes.Buffer
-	command := NewRootCommand(&stdout, &bytes.Buffer{}, Dependencies{SearchActions: search})
-	command.SetArgs([]string{"search", "docker build", "-n", "3", "--fast"})
+	command := commandForTest(
+		newSearchCommandWithSearch(search),
+		&stdout,
+		&bytes.Buffer{},
+		"docker build",
+		"-n",
+		"3",
+		"--fast",
+	)
 
 	if err := command.Execute(); err != nil {
 		t.Fatal(err)

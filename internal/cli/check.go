@@ -9,12 +9,35 @@ import (
 	"text/tabwriter"
 
 	"github.com/joshuadavidthomas/gh-actionkit/internal/actions"
+	"github.com/joshuadavidthomas/gh-actionkit/internal/githubapi"
+	"github.com/joshuadavidthomas/gh-actionkit/internal/workflow"
 	"github.com/spf13/cobra"
 )
 
-type ActionCheck func(context.Context, string) (actions.CheckReport, error)
+type actionCheck func(context.Context, string) (actions.CheckReport, error)
 
-func newCheckCommand(check ActionCheck) *cobra.Command {
+func newCheckCommand() *cobra.Command {
+	return newCheckCommandWithCheck(checkActions)
+}
+
+func checkActions(ctx context.Context, repository string) (actions.CheckReport, error) {
+	scan, err := workflow.ScanRepository(repository)
+	if err != nil {
+		return actions.CheckReport{}, err
+	}
+	report := actions.CheckReport{WorkflowFiles: scan.Files, Uses: len(scan.Uses), Results: []actions.CheckResult{}}
+	if len(scan.Uses) == 0 {
+		return report, nil
+	}
+	client, err := githubapi.New()
+	if err != nil {
+		return actions.CheckReport{}, fmt.Errorf("connect to GitHub: %w", err)
+	}
+	report.Results, err = actions.NewCheckService(client).Check(ctx, scan.Uses)
+	return report, err
+}
+
+func newCheckCommandWithCheck(check actionCheck) *cobra.Command {
 	var repository string
 	var outputJSON bool
 

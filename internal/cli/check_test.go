@@ -24,8 +24,7 @@ func TestCheckWritesJSONBeforeReturningFindingStatus(t *testing.T) {
 		}, nil
 	}
 	var stdout bytes.Buffer
-	command := NewRootCommand(&stdout, &bytes.Buffer{}, Dependencies{CheckActions: check})
-	command.SetArgs([]string{"check", "-C", t.TempDir(), "--json"})
+	command := commandForTest(newCheckCommandWithCheck(check), &stdout, &bytes.Buffer{}, "-C", t.TempDir(), "--json")
 
 	err := command.Execute()
 	var statusError StatusError
@@ -45,8 +44,7 @@ func TestCheckEmptyJSONIsAnArray(t *testing.T) {
 		return actions.CheckReport{Results: []actions.CheckResult{}}, nil
 	}
 	var stdout bytes.Buffer
-	command := NewRootCommand(&stdout, &bytes.Buffer{}, Dependencies{CheckActions: check})
-	command.SetArgs([]string{"check", "-C", t.TempDir(), "--json"})
+	command := commandForTest(newCheckCommandWithCheck(check), &stdout, &bytes.Buffer{}, "-C", t.TempDir(), "--json")
 
 	if err := command.Execute(); err != nil {
 		t.Fatal(err)
@@ -70,8 +68,7 @@ func TestCheckPropagatesTextOutputErrors(t *testing.T) {
 			Results:       []actions.CheckResult{{Action: "owner/action"}},
 		}, nil
 	}
-	command := NewRootCommand(failingWriter{}, &bytes.Buffer{}, Dependencies{CheckActions: check})
-	command.SetArgs([]string{"check", "-C", t.TempDir()})
+	command := commandForTest(newCheckCommandWithCheck(check), failingWriter{}, &bytes.Buffer{}, "-C", t.TempDir())
 
 	if err := command.Execute(); err == nil {
 		t.Fatal("expected an error")
@@ -83,8 +80,7 @@ func TestCheckReportsNoWorkflowFiles(t *testing.T) {
 		return actions.CheckReport{}, nil
 	}
 	var stdout bytes.Buffer
-	command := NewRootCommand(&stdout, &bytes.Buffer{}, Dependencies{CheckActions: check})
-	command.SetArgs([]string{"check", "-C", t.TempDir()})
+	command := commandForTest(newCheckCommandWithCheck(check), &stdout, &bytes.Buffer{}, "-C", t.TempDir())
 
 	if err := command.Execute(); err != nil {
 		t.Fatal(err)

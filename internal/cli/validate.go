@@ -4,12 +4,22 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/joshuadavidthomas/gh-actionkit/internal/tools"
 	"github.com/spf13/cobra"
 )
 
-type WorkflowValidate func(string, bool, io.Writer, io.Writer) (files int, findings int, err error)
+type workflowValidate func(string, bool, io.Writer, io.Writer) (files int, findings int, err error)
 
-func newValidateCommand(validate WorkflowValidate) *cobra.Command {
+func newValidateCommand() *cobra.Command {
+	return newValidateCommandWithValidate(validateWorkflows)
+}
+
+func validateWorkflows(repository string, outputJSON bool, stdout, stderr io.Writer) (int, int, error) {
+	result, err := (tools.Actionlint{}).Validate(repository, outputJSON, stdout, stderr)
+	return result.Files, result.Findings, err
+}
+
+func newValidateCommandWithValidate(validate workflowValidate) *cobra.Command {
 	var repository string
 	var outputJSON bool
 

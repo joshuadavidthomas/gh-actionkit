@@ -27,8 +27,15 @@ func TestLintForwardsOptionsAndStatus(t *testing.T) {
 		}
 		return 13, nil
 	}
-	command := NewRootCommand(&bytes.Buffer{}, &bytes.Buffer{}, Dependencies{LintWorkflows: lint})
-	command.SetArgs([]string{"lint", "-C", repository, "--json", "--pedantic"})
+	command := commandForTest(
+		newLintCommandWithLint(lint),
+		&bytes.Buffer{},
+		&bytes.Buffer{},
+		"-C",
+		repository,
+		"--json",
+		"--pedantic",
+	)
 
 	err := command.Execute()
 	var statusError StatusError
@@ -44,8 +51,14 @@ func TestLintNoPedanticOverridesDefault(t *testing.T) {
 		}
 		return 0, nil
 	}
-	command := NewRootCommand(&bytes.Buffer{}, &bytes.Buffer{}, Dependencies{LintWorkflows: lint})
-	command.SetArgs([]string{"lint", "-C", t.TempDir(), "--no-pedantic"})
+	command := commandForTest(
+		newLintCommandWithLint(lint),
+		&bytes.Buffer{},
+		&bytes.Buffer{},
+		"-C",
+		t.TempDir(),
+		"--no-pedantic",
+	)
 
 	if err := command.Execute(); err != nil {
 		t.Fatal(err)
