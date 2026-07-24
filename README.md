@@ -10,7 +10,7 @@ Install the extension from GitHub:
 gh extension install joshuadavidthomas/gh-actionkit
 ```
 
-gh-actionkit uses the GitHub CLI's existing authentication. The `lint` command also requires [zizmor](https://docs.zizmor.sh/installation) (either the official binary or using [`uvx`](https//astral.sh/uv)).
+gh-actionkit uses the GitHub CLI's existing authentication. The `lint` command also requires [zizmor](https://docs.zizmor.sh/installation), either as the official binary or through [`uv`](https://astral.sh/uv).
 
 ## Commands
 
@@ -52,11 +52,12 @@ gh actionkit check --repo ../another-repository --json
 
 ```console
 gh actionkit lint --pedantic
+gh actionkit lint --offline
 gh actionkit validate
 gh actionkit validate --json
 ```
 
-`lint` preserves zizmor's exit status. `validate` exits with status 1 when actionlint finds a problem.
+`lint` uses the active GitHub CLI token for zizmor's online audits. Pass `--offline` to disable repository fetches and online audits. If `gh` has credentials for more than one host, select one with `GH_HOST`, such as `GH_HOST=github.example.com gh actionkit lint`. `lint` preserves zizmor's exit status. `validate` exits with status 1 when actionlint finds a problem.
 
 ## Development
 

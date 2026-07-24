@@ -1,0 +1,9 @@
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: "/internal/tools"
+    schedule:
+      interval: weekly
+      timezone: America/Chicago
+    cooldown:
+      default-days: 7
