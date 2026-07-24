@@ -11,44 +11,39 @@ import (
 	"github.com/spf13/cobra"
 )
 
-type actionSearch func(context.Context, string, int, bool) ([]actions.SearchResult, error)
+type actionSearch func(context.Context, string, int) ([]actions.SearchResult, error)
 
 func newSearchCommand() *cobra.Command {
 	return newSearchCommandWithSearch(searchActions)
 }
 
-func searchActions(ctx context.Context, query string, limit int, fast bool) ([]actions.SearchResult, error) {
+func searchActions(ctx context.Context, query string, limit int) ([]actions.SearchResult, error) {
 	client, err := githubapi.New()
 	if err != nil {
 		return nil, fmt.Errorf("connect to GitHub: %w", err)
 	}
-	return actions.NewSearchService(client).Search(ctx, query, limit, fast)
+	return actions.NewSearchService(client).Search(ctx, query, limit)
 }
 
 func newSearchCommandWithSearch(search actionSearch) *cobra.Command {
 	var limit int
 	var outputJSON bool
-	var fast bool
 	command := &cobra.Command{
 		Use:   "search QUERY",
 		Short: "Search for GitHub Actions",
-		Long:  "Search GitHub repositories and verify that each result contains a root Action manifest. Use --fast to skip verification.",
+		Long:  "Search GitHub repositories and verify that each result contains a root Action manifest.",
 		Example: "  gh actionkit search checkout\n" +
-			"  gh actionkit search \"docker build\" --fast",
+			"  gh actionkit search \"docker build\" --limit 5",
 		Args: cobra.ExactArgs(1),
 		RunE: func(command *cobra.Command, args []string) error {
-			label := "Searching GitHub..."
-			if !fast {
-				label = "Searching GitHub and verifying actions..."
-			}
 			indicator := startCommandSpinner(
 				command.OutOrStdout(),
 				command.ErrOrStderr(),
 				outputJSON,
-				label,
+				"Searching GitHub and verifying actions...",
 			)
 			defer indicator.Stop()
-			results, err := search(command.Context(), args[0], limit, fast)
+			results, err := search(command.Context(), args[0], limit)
 			indicator.Stop()
 			if err != nil {
 				return err
@@ -68,7 +63,6 @@ func newSearchCommandWithSearch(search actionSearch) *cobra.Command {
 	}
 	command.Flags().IntVarP(&limit, "limit", "n", 10, "number of results to return (1-100)")
 	command.Flags().BoolVar(&outputJSON, "json", false, "output JSON")
-	command.Flags().BoolVar(&fast, "fast", false, "skip action manifest verification")
 	return command
 }
 

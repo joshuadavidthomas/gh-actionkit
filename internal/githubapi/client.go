@@ -7,27 +7,72 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"time"
 
 	"github.com/cli/go-gh/v2/pkg/api"
 	"github.com/joshuadavidthomas/gh-actionkit/internal/actions"
 )
 
-const tagsPerPage = 100
+const (
+	tagsPerPage = 100
+	// Manifest lookups make a 100-repository GraphQL query too costly for GitHub.
+	graphQLSearchPageSize = 20
+	requestTimeout        = 30 * time.Second
+
+	searchRepositoriesQuery = `
+query SearchRepositories($query: String!, $limit: Int!, $cursor: String) {
+  search(query: $query, type: REPOSITORY, first: $limit, after: $cursor) {
+    nodes {
+      ... on Repository {
+        nameWithOwner
+        description
+        stargazerCount
+        url
+        actionYml: object(expression: "HEAD:action.yml") {
+          __typename
+        }
+        actionYaml: object(expression: "HEAD:action.yaml") {
+          __typename
+        }
+      }
+    }
+    pageInfo {
+      hasNextPage
+      endCursor
+    }
+  }
+}`
+)
 
 type restClient interface {
 	DoWithContext(context.Context, string, string, io.Reader, interface{}) error
 }
 
-type Client struct {
-	rest restClient
+type graphQLClient interface {
+	DoWithContext(context.Context, string, map[string]interface{}, interface{}) error
 }
 
+type Client struct {
+	rest    restClient
+	graphQL graphQLClient
+}
+
+var (
+	_ actions.SearchSource  = (*Client)(nil)
+	_ actions.VersionSource = (*Client)(nil)
+)
+
 func New() (*Client, error) {
-	rest, err := api.DefaultRESTClient()
+	options := api.ClientOptions{Timeout: requestTimeout}
+	rest, err := api.NewRESTClient(options)
 	if err != nil {
-		return nil, err
+		return nil, authenticationError(err)
 	}
-	return &Client{rest: rest}, nil
+	graphQL, err := api.NewGraphQLClient(options)
+	if err != nil {
+		return nil, authenticationError(err)
+	}
+	return &Client{rest: rest, graphQL: graphQL}, nil
 }
 
 func (c *Client) LatestRelease(ctx context.Context, repository actions.Repository) (string, bool, error) {
@@ -63,49 +108,77 @@ func (c *Client) Tags(ctx context.Context, repository actions.Repository) ([]str
 	}
 }
 
-func (c *Client) SearchRepositories(ctx context.Context, query string, limit int) ([]actions.SearchResult, error) {
-	parameters := url.Values{
-		"q":        {query + " action in:name,description"},
-		"sort":     {"stars"},
-		"order":    {"desc"},
-		"per_page": {fmt.Sprint(limit)},
-	}
-	var response struct {
-		Items []struct {
-			FullName        string  `json:"full_name"`
-			Description     *string `json:"description"`
-			StargazersCount int     `json:"stargazers_count"`
-			HTMLURL         string  `json:"html_url"`
-		} `json:"items"`
-	}
-	if err := c.get(ctx, "search/repositories?"+parameters.Encode(), &response); err != nil {
-		return nil, err
-	}
+func (c *Client) SearchRepositories(
+	ctx context.Context,
+	options actions.SearchOptions,
+) ([]actions.SearchResult, error) {
+	results := make([]actions.SearchResult, 0, options.ResultLimit)
+	var cursor *string
+	candidatesRequested := 0
+	for candidatesRequested < options.CandidateLimit && len(results) < options.ResultLimit {
+		pageSize := min(graphQLSearchPageSize, options.CandidateLimit-candidatesRequested)
+		candidatesRequested += pageSize
+		variables := map[string]interface{}{
+			"query":  options.Query + " action in:name,description sort:stars-desc",
+			"limit":  pageSize,
+			"cursor": cursor,
+		}
+		var response searchRepositoriesResponse
+		if err := c.graphQL.DoWithContext(ctx, searchRepositoriesQuery, variables, &response); err != nil {
+			return nil, normalizeError(err, time.Now())
+		}
 
-	results := make([]actions.SearchResult, 0, len(response.Items))
-	for _, item := range response.Items {
-		results = append(results, actions.SearchResult{
-			Action:      item.FullName,
-			Description: item.Description,
-			Stars:       item.StargazersCount,
-			URL:         item.HTMLURL,
-		})
+		for _, repository := range response.Search.Nodes {
+			if !repository.hasActionManifest() {
+				continue
+			}
+			results = append(results, actions.SearchResult{
+				Action:      repository.NameWithOwner,
+				Description: repository.Description,
+				Stars:       repository.StargazerCount,
+				URL:         repository.URL,
+			})
+			if len(results) == options.ResultLimit {
+				break
+			}
+		}
+		if !response.Search.PageInfo.HasNextPage || response.Search.PageInfo.EndCursor == nil {
+			break
+		}
+		cursor = response.Search.PageInfo.EndCursor
 	}
 	return results, nil
 }
 
-func (c *Client) HasFile(ctx context.Context, repository actions.Repository, name string) (bool, error) {
-	var response struct {
-		Type string `json:"type"`
-	}
-	path := repositoryPath(repository) + "/contents/" + url.PathEscape(name)
-	if err := c.get(ctx, path, &response); err != nil {
-		if isNotFound(err) {
-			return false, nil
-		}
-		return false, err
-	}
-	return response.Type == "file", nil
+type searchRepositoriesResponse struct {
+	Search struct {
+		Nodes    []searchRepository `json:"nodes"`
+		PageInfo struct {
+			HasNextPage bool    `json:"hasNextPage"`
+			EndCursor   *string `json:"endCursor"`
+		} `json:"pageInfo"`
+	} `json:"search"`
+}
+
+type searchRepository struct {
+	NameWithOwner  string         `json:"nameWithOwner"`
+	Description    *string        `json:"description"`
+	StargazerCount int            `json:"stargazerCount"`
+	URL            string         `json:"url"`
+	ActionYML      *graphQLObject `json:"actionYml"`
+	ActionYAML     *graphQLObject `json:"actionYaml"`
+}
+
+type graphQLObject struct {
+	TypeName string `json:"__typename"`
+}
+
+func (repository searchRepository) hasActionManifest() bool {
+	return isBlob(repository.ActionYML) || isBlob(repository.ActionYAML)
+}
+
+func isBlob(object *graphQLObject) bool {
+	return object != nil && object.TypeName == "Blob"
 }
 
 func (c *Client) ResolveTag(ctx context.Context, repository actions.Repository, tag string) (string, bool, error) {
@@ -147,10 +220,7 @@ type gitObject struct {
 
 func (c *Client) get(ctx context.Context, path string, response interface{}) error {
 	err := c.rest.DoWithContext(ctx, http.MethodGet, path, nil, response)
-	if advice, limited := rateLimitAdvice(err); limited {
-		return fmt.Errorf("%s: %w", advice, err)
-	}
-	return err
+	return normalizeError(err, time.Now())
 }
 
 func repositoryPath(repository actions.Repository) string {
@@ -160,21 +230,4 @@ func repositoryPath(repository actions.Repository) string {
 func isNotFound(err error) bool {
 	var httpError *api.HTTPError
 	return errors.As(err, &httpError) && httpError.StatusCode == http.StatusNotFound
-}
-
-func rateLimitAdvice(err error) (string, bool) {
-	var httpError *api.HTTPError
-	if !errors.As(err, &httpError) {
-		return "", false
-	}
-	if retryAfter := httpError.Headers.Get("Retry-After"); retryAfter != "" {
-		return "GitHub API rate limited; retry after " + retryAfter + " seconds", true
-	}
-	if httpError.StatusCode == http.StatusTooManyRequests {
-		return "GitHub API rate limited; retry later", true
-	}
-	if httpError.StatusCode == http.StatusForbidden && httpError.Headers.Get("X-RateLimit-Remaining") == "0" {
-		return "GitHub API rate limited; run `gh auth status` to check authentication", true
-	}
-	return "", false
 }

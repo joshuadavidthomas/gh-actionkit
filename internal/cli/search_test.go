@@ -9,7 +9,7 @@ import (
 )
 
 func TestSearchJSONUsesEmptyArray(t *testing.T) {
-	search := func(context.Context, string, int, bool) ([]actions.SearchResult, error) {
+	search := func(context.Context, string, int) ([]actions.SearchResult, error) {
 		return []actions.SearchResult{}, nil
 	}
 	var stdout bytes.Buffer
@@ -24,9 +24,9 @@ func TestSearchJSONUsesEmptyArray(t *testing.T) {
 }
 
 func TestSearchForwardsOptions(t *testing.T) {
-	search := func(_ context.Context, query string, limit int, fast bool) ([]actions.SearchResult, error) {
-		if query != "docker build" || limit != 3 || !fast {
-			t.Fatalf("query=%q limit=%d fast=%v", query, limit, fast)
+	search := func(_ context.Context, query string, limit int) ([]actions.SearchResult, error) {
+		if query != "docker build" || limit != 3 {
+			t.Fatalf("query=%q limit=%d", query, limit)
 		}
 		return []actions.SearchResult{{Action: "docker/build-push-action", Stars: 7100}}, nil
 	}
@@ -38,7 +38,6 @@ func TestSearchForwardsOptions(t *testing.T) {
 		"docker build",
 		"-n",
 		"3",
-		"--fast",
 	)
 
 	if err := command.Execute(); err != nil {
