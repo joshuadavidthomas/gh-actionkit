@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Switched Action search and manifest verification to bounded GraphQL requests.
 - Improved GitHub authentication and rate-limit errors, including retry times when GitHub provides them.
+- Enabled zizmor online audits by default with the active GitHub CLI credentials.
 
 ### Removed
 
