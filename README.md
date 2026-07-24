@@ -12,6 +12,34 @@ gh extension install joshuadavidthomas/gh-actionkit
 
 gh-actionkit uses the GitHub CLI's existing authentication. The `lint` command also requires [zizmor](https://docs.zizmor.sh/installation), either as the official binary or through [`uv`](https://astral.sh/uv).
 
+## Use with prek or pre-commit
+
+Install [prek](https://prek.j178.dev/) (recommended for faster installs and runs) or [pre-commit](https://pre-commit.com/#install). Both use the same `.pre-commit-config.yaml`. Add gh-actionkit without installing the GitHub CLI extension, and pin `rev` to a released tag:
+
+```yaml
+repos:
+  - repo: https://github.com/joshuadavidthomas/gh-actionkit
+    rev: "vX.Y.Z"
+    hooks:
+      - id: validate
+```
+
+Three hooks are available: `validate`, `lint`, and `check`. They run when a file in `.github/workflows` changes. The validate hook is self-contained. The lint hook requires zizmor or uv; add `args: [--offline]` to skip its GitHub API audits. The check hook requires GitHub credentials.
+
+With prek, install the Git hook and prepare its Go environment up front:
+
+```console
+prek install --prepare-hooks
+prek run validate --all-files
+```
+
+The equivalent pre-commit commands are:
+
+```console
+pre-commit install --install-hooks
+pre-commit run validate --all-files
+```
+
 ## Agent skill
 
 The [`gh-actionkit` agent skill](skills/gh-actionkit/SKILL.md) teaches coding agents how to find, pin, check, lint, and validate GitHub Actions. Install it with any Agent Skills-compatible client.

@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Added prek and pre-commit hooks for checking, linting, and validating GitHub Actions workflows.
 - Added an installable agent skill for gh-actionkit, including Claude Code plugin metadata.
 
 ### Changed
