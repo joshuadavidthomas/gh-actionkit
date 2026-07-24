@@ -16,7 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Removed `search --fast`; search results now always contain a root `action.yml` or `action.yaml`.
 
-## [0.1.0] - 2026-07-23
+## [0.1.0]
 
 ### Added
 
