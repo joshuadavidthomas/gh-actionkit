@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "gh-actionkit",
+  "description": "Claude Code plugins for gh-actionkit.",
+  "owner": {
+    "name": "Josh Thomas"
+  },
+  "plugins": [
+    {
+      "name": "gh-actionkit",
+      "source": "./"
+    }
+  ]
+}

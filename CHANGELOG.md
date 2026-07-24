@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Added an installable agent skill for gh-actionkit, including Claude Code plugin metadata.
+
 ### Changed
 
 - Switched Action search and manifest verification to bounded GraphQL requests.

@@ -12,6 +12,30 @@ gh extension install joshuadavidthomas/gh-actionkit
 
 gh-actionkit uses the GitHub CLI's existing authentication. The `lint` command also requires [zizmor](https://docs.zizmor.sh/installation), either as the official binary or through [`uv`](https://astral.sh/uv).
 
+## Agent skill
+
+The [`gh-actionkit` agent skill](skills/gh-actionkit/SKILL.md) teaches coding agents how to find, pin, check, lint, and validate GitHub Actions. Install it with any Agent Skills-compatible client.
+
+With [dotagents](https://github.com/getsentry/dotagents), initialize the target project once, then add the skill:
+
+```console
+npx @sentry/dotagents init
+npx @sentry/dotagents add joshuadavidthomas/gh-actionkit --skill gh-actionkit
+```
+
+With [skills](https://skills.sh):
+
+```console
+npx skills add joshuadavidthomas/gh-actionkit --skill gh-actionkit
+```
+
+As a Claude Code plugin:
+
+```console
+claude plugin marketplace add joshuadavidthomas/gh-actionkit
+claude plugin install gh-actionkit@gh-actionkit
+```
+
 ## Commands
 
 | Command | Purpose |

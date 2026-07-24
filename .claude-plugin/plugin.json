@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "gh-actionkit",
+  "description": "Find GitHub Actions and keep workflow files current, valid, and safe.",
+  "author": {
+    "name": "Josh Thomas"
+  },
+  "repository": "https://github.com/joshuadavidthomas/gh-actionkit",
+  "license": "MIT"
+}
