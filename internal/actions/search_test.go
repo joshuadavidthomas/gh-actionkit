@@ -3,78 +3,54 @@ package actions
 import (
 	"context"
 	"errors"
-	"sync/atomic"
 	"testing"
 )
 
 type fakeSearchSource struct {
-	results   []SearchResult
-	manifests map[string]bool
-	err       error
-	fileCalls atomic.Int32
+	results []SearchResult
+	err     error
+	options SearchOptions
 }
 
-func (f *fakeSearchSource) SearchRepositories(context.Context, string, int) ([]SearchResult, error) {
+func (f *fakeSearchSource) SearchRepositories(
+	_ context.Context,
+	options SearchOptions,
+) ([]SearchResult, error) {
+	f.options = options
 	return f.results, f.err
 }
 
-func (f *fakeSearchSource) HasFile(_ context.Context, repository Repository, name string) (bool, error) {
-	f.fileCalls.Add(1)
-	if f.err != nil {
-		return false, f.err
-	}
-	return f.manifests[repository.Owner+"/"+repository.Name+"/"+name], nil
-}
+func TestSearchRequestsVerifiedCandidatesAndAppliesLimit(t *testing.T) {
+	source := &fakeSearchSource{results: []SearchResult{
+		{Action: "owner/popular", Stars: 200},
+		{Action: "owner/small", Stars: 10},
+	}}
 
-func TestSearchVerifiesAndSortsActions(t *testing.T) {
-	source := &fakeSearchSource{
-		results: []SearchResult{
-			{Action: "owner/popular", Stars: 200},
-			{Action: "owner/not-an-action", Stars: 300},
-			{Action: "owner/small", Stars: 10},
-		},
-		manifests: map[string]bool{
-			"owner/popular/action.yaml": true,
-			"owner/small/action.yml":    true,
-		},
-	}
-
-	results, err := NewSearchService(source).Search(context.Background(), "build", 10, false)
+	results, err := NewSearchService(source).Search(context.Background(), "build", 1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(results) != 2 || results[0].Action != "owner/popular" || results[1].Action != "owner/small" {
+	if len(results) != 1 || results[0].Action != "owner/popular" {
 		t.Fatalf("unexpected results: %#v", results)
 	}
-}
-
-func TestFastSearchSkipsManifestChecks(t *testing.T) {
-	source := &fakeSearchSource{results: []SearchResult{{Action: "owner/repository"}}}
-
-	results, err := NewSearchService(source).Search(context.Background(), "build", 1, true)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(results) != 1 || source.fileCalls.Load() != 0 {
-		t.Fatalf("results=%#v file calls=%d", results, source.fileCalls.Load())
+	if source.options.Query != "build" || source.options.ResultLimit != 1 ||
+		source.options.CandidateLimit != searchCandidates {
+		t.Fatalf("unexpected search options: %#v", source.options)
 	}
 }
 
-func TestSearchReportsVerificationErrors(t *testing.T) {
+func TestSearchReportsSourceErrors(t *testing.T) {
 	sourceErr := errors.New("rate limited")
-	source := &fakeSearchSource{
-		results: []SearchResult{{Action: "owner/action"}},
-		err:     sourceErr,
-	}
+	source := &fakeSearchSource{err: sourceErr}
 
-	_, err := NewSearchService(source).Search(context.Background(), "build", 10, false)
+	_, err := NewSearchService(source).Search(context.Background(), "build", 10)
 	if !errors.Is(err, sourceErr) {
 		t.Fatalf("expected source error, got %v", err)
 	}
 }
 
 func TestSearchRejectsInvalidLimit(t *testing.T) {
-	_, err := NewSearchService(&fakeSearchSource{}).Search(context.Background(), "build", 0, false)
+	_, err := NewSearchService(&fakeSearchSource{}).Search(context.Background(), "build", 0)
 	if err == nil {
 		t.Fatal("expected an error")
 	}

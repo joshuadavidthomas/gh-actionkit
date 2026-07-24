@@ -34,10 +34,10 @@ gh actionkit version actions/checkout --json
 ```console
 gh actionkit search "docker build"
 gh actionkit search checkout --limit 5
-gh actionkit search checkout --fast --json
+gh actionkit search checkout --json
 ```
 
-ActionKit normally verifies that each result has an `action.yml` or `action.yaml` file. `--fast` skips that check.
+ActionKit verifies that each result has an `action.yml` or `action.yaml` file.
 
 ### Check a repository
 
