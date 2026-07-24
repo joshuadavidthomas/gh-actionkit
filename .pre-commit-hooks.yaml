@@ -1,0 +1,26 @@
+- id: check
+  name: Check GitHub Action versions
+  description: Check workflow Action refs for newer stable versions with gh-actionkit.
+  entry: gh-actionkit check
+  language: golang
+  files: ^\.github/workflows/[^/]+\.ya?ml$
+  pass_filenames: false
+  stages: [pre-commit]
+
+- id: lint
+  name: Lint GitHub Actions workflows
+  description: Audit workflow security with gh-actionkit and zizmor.
+  entry: gh-actionkit lint
+  language: golang
+  files: ^\.github/workflows/[^/]+\.ya?ml$
+  pass_filenames: false
+  stages: [pre-commit]
+
+- id: validate
+  name: Validate GitHub Actions workflows
+  description: Validate workflow syntax with gh-actionkit's embedded actionlint library.
+  entry: gh-actionkit validate
+  language: golang
+  files: ^\.github/workflows/[^/]+\.ya?ml$
+  pass_filenames: false
+  stages: [pre-commit]

@@ -10,3 +10,26 @@ repos:
     rev: v1.0.0-rc.4
     hooks:
       - id: go-fmt
+  - repo: local
+    hooks:
+      - id: check
+        name: Check GitHub Action versions
+        entry: go run . check
+        language: system
+        files: ^\.github/workflows/[^/]+\.ya?ml$
+        pass_filenames: false
+        stages: [pre-commit]
+      - id: lint
+        name: Lint GitHub Actions workflows
+        entry: go run . lint
+        language: system
+        files: ^\.github/workflows/[^/]+\.ya?ml$
+        pass_filenames: false
+        stages: [pre-commit]
+      - id: validate
+        name: Validate GitHub Actions workflows
+        entry: go run . validate
+        language: system
+        files: ^\.github/workflows/[^/]+\.ya?ml$
+        pass_filenames: false
+        stages: [pre-commit]
