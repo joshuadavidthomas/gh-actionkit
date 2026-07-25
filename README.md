@@ -78,8 +78,11 @@ claude plugin install gh-actionkit@gh-actionkit
 
 ```console
 gh actionkit version actions/checkout
+gh actionkit version actions/checkout --snippet
 gh actionkit version actions/checkout --json
 ```
+
+Use `--snippet` to print a copy-ready `uses:` line pinned to the latest stable release's full commit SHA.
 
 ### Search for Actions
 
