@@ -48,30 +48,14 @@ func (s VersionService) Lookup(ctx context.Context, action string) (VersionInfo,
 	if err != nil {
 		return VersionInfo{}, err
 	}
-
-	latestTag, found, err := s.source.LatestRelease(ctx, repository)
+	latest, err := s.latest(ctx, repository, action)
 	if err != nil {
-		return VersionInfo{}, fmt.Errorf("find latest release for %s: %w", action, err)
-	}
-	if !found {
-		tags, tagsErr := s.source.Tags(ctx, repository)
-		if tagsErr != nil {
-			return VersionInfo{}, fmt.Errorf("list tags for %s: %w", action, tagsErr)
-		}
-		latestTag, found = latestStableTag(tags)
-	}
-	if !found {
-		return VersionInfo{}, fmt.Errorf("%w for %s", ErrNoVersions, action)
+		return VersionInfo{}, err
 	}
 
-	majorTag := latestTag
-	if match := majorTagPattern.FindStringSubmatch(latestTag); match != nil {
+	majorTag := latest.Tag
+	if match := majorTagPattern.FindStringSubmatch(latest.Tag); match != nil {
 		majorTag = match[1]
-	}
-
-	latestSHA, err := s.resolveTag(ctx, repository, latestTag)
-	if err != nil {
-		return VersionInfo{}, fmt.Errorf("resolve tag %s for %s: %w", latestTag, action, err)
 	}
 	majorSHA, err := s.resolveTag(ctx, repository, majorTag)
 	if err != nil {
@@ -81,8 +65,39 @@ func (s VersionService) Lookup(ctx context.Context, action string) (VersionInfo,
 	return VersionInfo{
 		Action: action,
 		Major:  Version{Tag: majorTag, SHA: majorSHA},
-		Latest: Version{Tag: latestTag, SHA: latestSHA},
+		Latest: latest,
 	}, nil
+}
+
+func (s VersionService) Latest(ctx context.Context, action string) (Version, error) {
+	repository, err := parseRepository(action)
+	if err != nil {
+		return Version{}, err
+	}
+	return s.latest(ctx, repository, action)
+}
+
+func (s VersionService) latest(ctx context.Context, repository Repository, action string) (Version, error) {
+	latestTag, found, err := s.source.LatestRelease(ctx, repository)
+	if err != nil {
+		return Version{}, fmt.Errorf("find latest release for %s: %w", action, err)
+	}
+	if !found {
+		tags, tagsErr := s.source.Tags(ctx, repository)
+		if tagsErr != nil {
+			return Version{}, fmt.Errorf("list tags for %s: %w", action, tagsErr)
+		}
+		latestTag, found = latestStableTag(tags)
+	}
+	if !found {
+		return Version{}, fmt.Errorf("%w for %s", ErrNoVersions, action)
+	}
+
+	latestSHA, err := s.resolveTag(ctx, repository, latestTag)
+	if err != nil {
+		return Version{}, fmt.Errorf("resolve tag %s for %s: %w", latestTag, action, err)
+	}
+	return Version{Tag: latestTag, SHA: latestSHA}, nil
 }
 
 func (s VersionService) resolveTag(ctx context.Context, repository Repository, tag string) (*string, error) {

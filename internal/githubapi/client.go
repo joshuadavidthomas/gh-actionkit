@@ -58,6 +58,7 @@ type Client struct {
 }
 
 var (
+	_ actions.InspectSource = (*Client)(nil)
 	_ actions.SearchSource  = (*Client)(nil)
 	_ actions.VersionSource = (*Client)(nil)
 )

@@ -41,7 +41,7 @@ func TestRootRegistersCommands(t *testing.T) {
 		got = append(got, subcommand.Name())
 	}
 	slices.Sort(got)
-	want := []string{"check", "lint", "search", "validate", "version"}
+	want := []string{"check", "inspect", "lint", "search", "validate", "version"}
 	if !slices.Equal(got, want) {
 		t.Fatalf("commands = %v, want %v", got, want)
 	}

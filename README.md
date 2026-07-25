@@ -70,6 +70,7 @@ claude plugin install gh-actionkit@gh-actionkit
 | --- | --- |
 | `version OWNER/REPO` | Show the latest stable release, major tag, and commit SHAs |
 | `search QUERY` | Find repositories that contain a root Action manifest |
+| `inspect OWNER/REPO` | Show repository, manifest, runtime, input, output, and stable version details |
 | `check` | Find outdated Action refs in a repository's workflows |
 | `lint` | Audit workflows with zizmor |
 | `validate` | Validate workflow syntax with the embedded actionlint library |
@@ -93,6 +94,15 @@ gh actionkit search checkout --json
 ```
 
 ActionKit verifies that each result has an `action.yml` or `action.yaml` file.
+
+### Inspect an Action
+
+```console
+gh actionkit inspect actions/checkout
+gh actionkit inspect actions/checkout --json
+```
+
+`inspect` shows repository ownership and maintenance facts, then parses the root Action manifest at the latest stable release. The manifest ref appears in both output formats. When that release resolves to a full commit SHA, the output includes a copy-ready pinned `uses:` line. Repositories without releases or tags are inspected at `HEAD`.
 
 ### Check a repository
 
