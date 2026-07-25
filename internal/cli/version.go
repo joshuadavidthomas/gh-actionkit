@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -27,11 +28,13 @@ func lookupVersion(ctx context.Context, action string) (actions.VersionInfo, err
 
 func newVersionCommandWithLookup(lookup versionLookup) *cobra.Command {
 	var outputJSON bool
+	var outputSnippet bool
 	command := &cobra.Command{
 		Use:   "version OWNER/REPO",
 		Short: "Show the latest stable version of a GitHub Action",
 		Long:  "Show the latest stable release, major tag, and commit SHAs for pinning a GitHub Action.",
 		Example: "  gh actionkit version actions/checkout\n" +
+			"  gh actionkit version actions/checkout --snippet\n" +
 			"  gh actionkit version actions/checkout --json",
 		Args: cobra.ExactArgs(1),
 		RunE: func(command *cobra.Command, args []string) error {
@@ -52,11 +55,36 @@ func newVersionCommandWithLookup(lookup versionLookup) *cobra.Command {
 				encoder.SetIndent("", "  ")
 				return encoder.Encode(info)
 			}
+			if outputSnippet {
+				return writeVersionSnippet(command.OutOrStdout(), info)
+			}
 			return writeVersion(command.OutOrStdout(), info)
 		},
 	}
 	command.Flags().BoolVar(&outputJSON, "json", false, "output JSON")
+	command.Flags().BoolVar(&outputSnippet, "snippet", false, "output a pinned uses line for the latest stable version")
+	command.MarkFlagsMutuallyExclusive("json", "snippet")
 	return command
+}
+
+func writeVersionSnippet(output io.Writer, info actions.VersionInfo) error {
+	if info.Latest.SHA == nil || !isFullCommitSHA(*info.Latest.SHA) {
+		return fmt.Errorf(
+			"cannot write snippet for %s: tag %s does not resolve to a full commit SHA",
+			info.Action,
+			info.Latest.Tag,
+		)
+	}
+	_, err := fmt.Fprintf(output, "uses: %s@%s # %s\n", info.Action, *info.Latest.SHA, info.Latest.Tag)
+	return err
+}
+
+func isFullCommitSHA(value string) bool {
+	if len(value) != 40 {
+		return false
+	}
+	_, err := hex.DecodeString(value)
+	return err == nil
 }
 
 func writeVersion(output io.Writer, info actions.VersionInfo) error {

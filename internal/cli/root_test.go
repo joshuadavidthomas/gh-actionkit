@@ -83,6 +83,89 @@ func TestVersionJSON(t *testing.T) {
 	}
 }
 
+func TestVersionSnippet(t *testing.T) {
+	latestSHA := "0123456789abcdef0123456789abcdef01234567"
+	lookup := func(context.Context, string) (actions.VersionInfo, error) {
+		return actions.VersionInfo{
+			Action: "actions/checkout",
+			Latest: actions.Version{Tag: "v4.2.2", SHA: &latestSHA},
+		}, nil
+	}
+	var stdout bytes.Buffer
+	command := commandForTest(
+		newVersionCommandWithLookup(lookup),
+		&stdout,
+		&bytes.Buffer{},
+		"actions/checkout",
+		"--snippet",
+	)
+
+	if err := command.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	want := "uses: actions/checkout@0123456789abcdef0123456789abcdef01234567 # v4.2.2\n"
+	if stdout.String() != want {
+		t.Fatalf("snippet = %q, want %q", stdout.String(), want)
+	}
+}
+
+func TestVersionSnippetRequiresFullCommitSHA(t *testing.T) {
+	tests := []struct {
+		name string
+		sha  *string
+	}{
+		{name: "missing"},
+		{name: "empty", sha: testStringPointer("")},
+		{name: "short", sha: testStringPointer("0123456789ab")},
+		{name: "non hexadecimal", sha: testStringPointer("zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz")},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			lookup := func(context.Context, string) (actions.VersionInfo, error) {
+				return actions.VersionInfo{
+					Action: "owner/action",
+					Latest: actions.Version{Tag: "v1.2.3", SHA: test.sha},
+				}, nil
+			}
+			var stdout bytes.Buffer
+			command := commandForTest(
+				newVersionCommandWithLookup(lookup),
+				&stdout,
+				&bytes.Buffer{},
+				"owner/action",
+				"--snippet",
+			)
+			command.SilenceUsage = true
+
+			err := command.Execute()
+			if err == nil || !strings.Contains(err.Error(), "does not resolve to a full commit SHA") {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if stdout.Len() != 0 {
+				t.Fatalf("unexpected output: %q", stdout.String())
+			}
+		})
+	}
+}
+
+func TestVersionRejectsMultipleOutputFormats(t *testing.T) {
+	lookup := func(context.Context, string) (actions.VersionInfo, error) {
+		return actions.VersionInfo{}, nil
+	}
+	command := commandForTest(
+		newVersionCommandWithLookup(lookup),
+		&bytes.Buffer{},
+		&bytes.Buffer{},
+		"owner/action",
+		"--json",
+		"--snippet",
+	)
+
+	if err := command.Execute(); err == nil {
+		t.Fatal("expected conflicting output format error")
+	}
+}
+
 func TestVersionTextShowsUnknownSHA(t *testing.T) {
 	lookup := func(context.Context, string) (actions.VersionInfo, error) {
 		return actions.VersionInfo{
