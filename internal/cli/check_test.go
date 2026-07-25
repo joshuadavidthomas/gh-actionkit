@@ -40,6 +40,94 @@ func TestCheckWritesJSONBeforeReturningFindingStatus(t *testing.T) {
 	}
 }
 
+func TestCheckPoliciesWriteViolationsBeforeReturningFindingStatus(t *testing.T) {
+	check := func(context.Context, string) (actions.CheckReport, error) {
+		return actions.CheckReport{
+			WorkflowFiles: 1,
+			Uses:          1,
+			Results: []actions.CheckResult{{
+				Action: "third-party/action",
+				Ref:    "main",
+			}},
+		}, nil
+	}
+	var stdout bytes.Buffer
+	command := commandForTest(
+		newCheckCommandWithCheck(check),
+		&stdout,
+		&bytes.Buffer{},
+		"-C",
+		t.TempDir(),
+		"--json",
+		"--require-sha",
+		"--fail-on-unknown",
+		"--allow-owner",
+		"actions",
+	)
+
+	err := command.Execute()
+	var statusError StatusError
+	if !errors.As(err, &statusError) || statusError.Code != 1 {
+		t.Fatalf("expected status 1, got %v", err)
+	}
+	for _, violation := range []string{`"unpinned"`, `"unknown"`, `"disallowed_owner"`} {
+		if !strings.Contains(stdout.String(), violation) {
+			t.Fatalf("JSON does not contain %s: %q", violation, stdout.String())
+		}
+	}
+}
+
+func TestCheckAcceptsRepeatedAllowedOwners(t *testing.T) {
+	check := func(context.Context, string) (actions.CheckReport, error) {
+		return actions.CheckReport{
+			WorkflowFiles: 1,
+			Uses:          3,
+			Results: []actions.CheckResult{
+				{Action: "actions/checkout", UpToDate: true},
+				{Action: "github/codeql-action", UpToDate: true},
+				{Action: "third-party/action", UpToDate: true},
+			},
+		}, nil
+	}
+	var stdout bytes.Buffer
+	command := commandForTest(
+		newCheckCommandWithCheck(check),
+		&stdout,
+		&bytes.Buffer{},
+		"-C",
+		t.TempDir(),
+		"--json",
+		"--allow-owner",
+		"actions",
+		"--allow-owner",
+		"github",
+	)
+
+	err := command.Execute()
+	var statusError StatusError
+	if !errors.As(err, &statusError) || statusError.Code != 1 {
+		t.Fatalf("expected status 1, got %v", err)
+	}
+	if count := strings.Count(stdout.String(), `"disallowed_owner"`); count != 1 {
+		t.Fatalf("disallowed owner violations = %d, want 1: %q", count, stdout.String())
+	}
+}
+
+func TestCheckUnknownDoesNotFailWithoutPolicy(t *testing.T) {
+	check := func(context.Context, string) (actions.CheckReport, error) {
+		return actions.CheckReport{
+			WorkflowFiles: 1,
+			Uses:          1,
+			Results:       []actions.CheckResult{{Action: "owner/action", Ref: "main"}},
+		}, nil
+	}
+	command := commandForTest(newCheckCommandWithCheck(check), &bytes.Buffer{}, &bytes.Buffer{}, "-C", t.TempDir())
+
+	if err := command.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestCheckEmptyJSONIsAnArray(t *testing.T) {
 	check := func(context.Context, string) (actions.CheckReport, error) {
 		return actions.CheckReport{Results: []actions.CheckResult{}}, nil
@@ -105,8 +193,18 @@ func TestRenderCheckResultsStylesHumanOutput(t *testing.T) {
 				{File: ".github/workflows/release.yml", Line: 34},
 			},
 		},
-		{Action: "owner/update", UpdateAvailable: true},
-		{Action: "owner/unknown"},
+		{
+			Action:          "owner/update",
+			UpdateAvailable: true,
+			PolicyViolations: []actions.PolicyViolation{
+				actions.PolicyViolationUnpinned,
+				actions.PolicyViolationDisallowedOwner,
+			},
+		},
+		{
+			Action:           "owner/unknown",
+			PolicyViolations: []actions.PolicyViolation{actions.PolicyViolationUnknown},
+		},
 	}, 0, false)
 
 	for _, text := range []string{
@@ -115,7 +213,10 @@ func TestRenderCheckResultsStylesHumanOutput(t *testing.T) {
 		"actions/checkout",
 		"up to date",
 		"update available",
+		"unpinned",
+		"owner not allowed",
 		"unknown",
+		"unknown ref rejected",
 		".github/workflows/test.yml:12",
 		".github/workflows/release.yml:34",
 		"v4.2.2",

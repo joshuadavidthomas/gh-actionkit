@@ -11,9 +11,10 @@ func TestCheckGroupsUsesAndComparesResolvedCommits(t *testing.T) {
 		release:      "v4.2.2",
 		releaseFound: true,
 		refs: map[string]string{
-			"v4":     latestSHA,
-			"v4.2.2": latestSHA,
-			"v3":     "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			"v4":           latestSHA,
+			"v4.2.2":       latestSHA,
+			"v3":           "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			"0123456789ab": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 		},
 	}
 	uses := []ActionUse{
@@ -41,27 +42,92 @@ func TestCheckGroupsUsesAndComparesResolvedCommits(t *testing.T) {
 			Ref:        "main",
 			Location:   Location{File: ".github/workflows/ci.yml", Line: 30},
 		},
+		{
+			Action:     "owner/action/subpath",
+			Repository: Repository{Owner: "owner", Name: "action"},
+			Ref:        "0123456789ab",
+			Location:   Location{File: ".github/workflows/ci.yml", Line: 40},
+		},
 	}
 
 	results, err := NewCheckService(source).Check(context.Background(), uses)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(results) != 3 {
+	if len(results) != 4 {
 		t.Fatalf("unexpected results: %#v", results)
 	}
 	byRef := make(map[string]CheckResult)
 	for _, result := range results {
-		byRef[result.ref] = result
+		byRef[result.Ref] = result
 	}
 	if !byRef["v3"].UpdateAvailable || len(byRef["v3"].Locations) != 2 {
 		t.Fatalf("unexpected v3 result: %#v", byRef["v3"])
 	}
-	if !byRef[latestSHA].UpToDate {
-		t.Fatalf("latest SHA should be current: %#v", byRef[latestSHA])
+	if !byRef[latestSHA].UpToDate || !byRef[latestSHA].Pinned {
+		t.Fatalf("latest SHA should be current and pinned: %#v", byRef[latestSHA])
+	}
+	if byRef["v3"].Pinned || byRef["main"].Pinned || byRef["0123456789ab"].Pinned {
+		t.Fatalf(
+			"non-SHA refs should not be pinned: v3=%#v main=%#v short=%#v",
+			byRef["v3"],
+			byRef["main"],
+			byRef["0123456789ab"],
+		)
 	}
 	if byRef["main"].UpToDate || byRef["main"].UpdateAvailable {
 		t.Fatalf("unresolved branch should be unknown: %#v", byRef["main"])
+	}
+}
+
+func TestApplyCheckPolicyReportsEachViolation(t *testing.T) {
+	results := []CheckResult{
+		{Action: "actions/checkout", Ref: "v4", UpToDate: true},
+		{Action: "third-party/action", Ref: "main"},
+		{
+			Action: "actions/setup-go",
+			Ref:    "0123456789012345678901234567890123456789",
+			Pinned: true,
+		},
+	}
+
+	got := ApplyCheckPolicy(results, CheckPolicy{
+		RequireSHA:    true,
+		FailOnUnknown: true,
+		AllowedOwners: []string{"Actions"},
+	})
+
+	if len(got[0].PolicyViolations) != 1 || got[0].PolicyViolations[0] != PolicyViolationUnpinned {
+		t.Fatalf("unexpected current tag violations: %#v", got[0].PolicyViolations)
+	}
+	want := []PolicyViolation{
+		PolicyViolationUnpinned,
+		PolicyViolationUnknown,
+		PolicyViolationDisallowedOwner,
+	}
+	if len(got[1].PolicyViolations) != len(want) {
+		t.Fatalf("unexpected unknown violations: %#v", got[1].PolicyViolations)
+	}
+	for index := range want {
+		if got[1].PolicyViolations[index] != want[index] {
+			t.Fatalf("unexpected unknown violations: %#v", got[1].PolicyViolations)
+		}
+	}
+	if len(got[2].PolicyViolations) != 1 || got[2].PolicyViolations[0] != PolicyViolationUnknown {
+		t.Fatalf("unexpected pinned unknown violations: %#v", got[2].PolicyViolations)
+	}
+}
+
+func TestApplyCheckPolicyClearsEarlierViolations(t *testing.T) {
+	results := []CheckResult{{
+		Action:           "owner/action",
+		PolicyViolations: []PolicyViolation{PolicyViolationUnpinned},
+	}}
+
+	got := ApplyCheckPolicy(results, CheckPolicy{})
+
+	if len(got[0].PolicyViolations) != 0 {
+		t.Fatalf("unexpected violations: %#v", got[0].PolicyViolations)
 	}
 }
 

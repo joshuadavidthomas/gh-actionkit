@@ -99,9 +99,11 @@ ActionKit verifies that each result has an `action.yml` or `action.yaml` file.
 ```console
 gh actionkit check
 gh actionkit check --repo ../another-repository --json
+gh actionkit check --require-sha --fail-on-unknown
+gh actionkit check --allow-owner actions --allow-owner github
 ```
 
-`check` exits with status 1 when it finds an update. Unresolved branches and other non-version refs are reported as unknown.
+`check` exits with status 1 when it finds an update. Use `--require-sha` to reject moving refs, `--fail-on-unknown` to reject refs that cannot be classified, and repeat `--allow-owner` to restrict remote Actions to named owners. Unresolved branches and other non-version refs are reported as unknown.
 
 ### Lint and validate workflows
 

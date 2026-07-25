@@ -109,14 +109,26 @@ func formatCheckLocations(result actions.CheckResult) string {
 }
 
 func formatCheckStatus(styles checkOutputStyles, result actions.CheckResult) string {
+	var status string
 	switch {
 	case result.UpToDate:
-		return styles.success.Render("up to date")
+		status = styles.success.Render("up to date")
 	case result.UpdateAvailable:
-		return styles.danger.Render("update available")
+		status = styles.danger.Render("update available")
 	default:
-		return styles.unknown.Render("unknown")
+		status = styles.unknown.Render("unknown")
 	}
+	for _, violation := range result.PolicyViolations {
+		switch violation {
+		case actions.PolicyViolationUnpinned:
+			status += "\n" + styles.danger.Render("unpinned")
+		case actions.PolicyViolationUnknown:
+			status += "\n" + styles.danger.Render("unknown ref rejected")
+		case actions.PolicyViolationDisallowedOwner:
+			status += "\n" + styles.danger.Render("owner not allowed")
+		}
+	}
+	return status
 }
 
 func styleCheckVersion(styles checkOutputStyles, version actions.CheckVersion) string {
