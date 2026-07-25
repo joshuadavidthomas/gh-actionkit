@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Added `check` policies for full-SHA pins, unknown refs, and allowed Action owners.
 - Added `version --snippet` for copy-ready, full-SHA-pinned `uses:` lines.
 
 ## [0.2.0]

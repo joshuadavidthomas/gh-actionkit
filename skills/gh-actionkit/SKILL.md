@@ -38,6 +38,7 @@ gh extension install joshuadavidthomas/gh-actionkit
 | Resolve an Action's stable tags and full SHAs | `gh actionkit version OWNER/REPO --json` |
 | Print a full-SHA-pinned `uses:` line | `gh actionkit version OWNER/REPO --snippet` |
 | Find stale or unknown Action refs | `gh actionkit check -C PATH --json` |
+| Enforce Action ref and owner policies | `gh actionkit check -C PATH --require-sha --fail-on-unknown --json` |
 | Validate workflow syntax and expressions | `gh actionkit validate -C PATH --json` |
 | Audit workflow security | `gh actionkit lint -C PATH --json` |
 
@@ -72,7 +73,8 @@ Add `--pedantic` to `lint` for stricter zizmor audits. Online audits are the def
 
 ## Read output and status together
 
-- `check` exits 1 when an update is available. Its JSON output is still the result, not a command failure.
+- `check` exits 1 when an update or requested policy violation is present. Its JSON output is still the result, not a command failure.
+- Add `--require-sha` to reject moving refs, `--fail-on-unknown` to reject unclassified refs, and repeat `--allow-owner OWNER` to restrict remote Actions by owner.
 - `validate` exits 1 when actionlint finds a problem. `--json` emits JSON Lines, not one JSON array.
 - `lint` preserves zizmor's exit status and output.
 - Authentication, API, path, and other command errors are real failures. Read stderr before deciding what happened.

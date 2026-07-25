@@ -31,15 +31,31 @@ type CheckVersion struct {
 	SHA *string `json:"sha"`
 }
 
+type PolicyViolation string
+
+const (
+	PolicyViolationUnpinned        PolicyViolation = "unpinned"
+	PolicyViolationUnknown         PolicyViolation = "unknown"
+	PolicyViolationDisallowedOwner PolicyViolation = "disallowed_owner"
+)
+
 type CheckResult struct {
-	Action          string       `json:"action"`
-	Used            CheckVersion `json:"used"`
-	Major           CheckVersion `json:"major"`
-	Latest          CheckVersion `json:"latest"`
-	UpToDate        bool         `json:"up_to_date"`
-	UpdateAvailable bool         `json:"update_available"`
-	Locations       []Location   `json:"locations"`
-	ref             string
+	Action           string            `json:"action"`
+	Ref              string            `json:"ref"`
+	Pinned           bool              `json:"pinned"`
+	Used             CheckVersion      `json:"used"`
+	Major            CheckVersion      `json:"major"`
+	Latest           CheckVersion      `json:"latest"`
+	UpToDate         bool              `json:"up_to_date"`
+	UpdateAvailable  bool              `json:"update_available"`
+	PolicyViolations []PolicyViolation `json:"policy_violations,omitempty"`
+	Locations        []Location        `json:"locations"`
+}
+
+type CheckPolicy struct {
+	RequireSHA    bool
+	FailOnUnknown bool
+	AllowedOwners []string
 }
 
 type CheckReport struct {
@@ -91,11 +107,36 @@ func (s CheckService) Check(ctx context.Context, uses []ActionUse) ([]CheckResul
 	}
 	sort.Slice(results, func(i, j int) bool {
 		if results[i].Action == results[j].Action {
-			return results[i].ref < results[j].ref
+			return results[i].Ref < results[j].Ref
 		}
 		return results[i].Action < results[j].Action
 	})
 	return results, nil
+}
+
+func ApplyCheckPolicy(results []CheckResult, policy CheckPolicy) []CheckResult {
+	allowedOwners := make(map[string]struct{}, len(policy.AllowedOwners))
+	for _, owner := range policy.AllowedOwners {
+		allowedOwners[strings.ToLower(owner)] = struct{}{}
+	}
+
+	for index := range results {
+		result := &results[index]
+		result.PolicyViolations = nil
+		if policy.RequireSHA && !result.Pinned {
+			result.PolicyViolations = append(result.PolicyViolations, PolicyViolationUnpinned)
+		}
+		if policy.FailOnUnknown && !result.UpToDate && !result.UpdateAvailable {
+			result.PolicyViolations = append(result.PolicyViolations, PolicyViolationUnknown)
+		}
+		if len(allowedOwners) > 0 {
+			owner, _, _ := strings.Cut(result.Action, "/")
+			if _, allowed := allowedOwners[strings.ToLower(owner)]; !allowed {
+				result.PolicyViolations = append(result.PolicyViolations, PolicyViolationDisallowedOwner)
+			}
+		}
+	}
+	return results
 }
 
 func (s CheckService) loadVersions(
@@ -160,8 +201,12 @@ func (s CheckService) newResult(
 	use ActionUse,
 	version *VersionInfo,
 ) (*CheckResult, error) {
-	result := &CheckResult{Action: use.Action, ref: use.Ref}
-	if commitSHAPattern.MatchString(use.Ref) {
+	result := &CheckResult{
+		Action: use.Action,
+		Ref:    use.Ref,
+		Pinned: commitSHAPattern.MatchString(use.Ref),
+	}
+	if result.Pinned {
 		result.Used.SHA = stringPointer(use.Ref)
 	} else {
 		result.Used.Tag = stringPointer(use.Ref)

@@ -38,12 +38,17 @@ func checkActions(ctx context.Context, repository string) (actions.CheckReport, 
 func newCheckCommandWithCheck(check actionCheck) *cobra.Command {
 	var repository string
 	var outputJSON bool
+	var requireSHA bool
+	var failOnUnknown bool
+	var allowedOwners []string
 
 	command := &cobra.Command{
 		Use:   "check",
 		Short: "Check workflow action refs for newer versions",
 		Long:  "Scan workflow files, resolve each remote Action ref, and compare it with the latest stable release or tag.",
 		Example: "  gh actionkit check\n" +
+			"  gh actionkit check --require-sha --fail-on-unknown\n" +
+			"  gh actionkit check --allow-owner actions --allow-owner github\n" +
 			"  gh actionkit check --repo ../another-repository --json",
 		Args: cobra.NoArgs,
 		RunE: func(command *cobra.Command, _ []string) error {
@@ -63,6 +68,11 @@ func newCheckCommandWithCheck(check actionCheck) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			report.Results = actions.ApplyCheckPolicy(report.Results, actions.CheckPolicy{
+				RequireSHA:    requireSHA,
+				FailOnUnknown: failOnUnknown,
+				AllowedOwners: allowedOwners,
+			})
 			if outputJSON {
 				encoder := json.NewEncoder(command.OutOrStdout())
 				encoder.SetIndent("", "  ")
@@ -83,7 +93,7 @@ func newCheckCommandWithCheck(check actionCheck) *cobra.Command {
 				}
 			}
 			for _, result := range report.Results {
-				if result.UpdateAvailable {
+				if result.UpdateAvailable || len(result.PolicyViolations) > 0 {
 					return StatusError{Code: 1}
 				}
 			}
@@ -92,6 +102,9 @@ func newCheckCommandWithCheck(check actionCheck) *cobra.Command {
 	}
 	command.Flags().StringVarP(&repository, "repo", "C", ".", "repository path to inspect")
 	command.Flags().BoolVar(&outputJSON, "json", false, "output JSON")
+	command.Flags().BoolVar(&requireSHA, "require-sha", false, "fail when a remote Action is not pinned to a full commit SHA")
+	command.Flags().BoolVar(&failOnUnknown, "fail-on-unknown", false, "fail when an Action ref cannot be classified")
+	command.Flags().StringSliceVar(&allowedOwners, "allow-owner", nil, "allow remote Actions from this owner (repeatable)")
 	return command
 }
 
