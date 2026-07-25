@@ -52,6 +52,35 @@ func TestVersionServiceUsesLatestRelease(t *testing.T) {
 	}
 }
 
+type recordingVersionSource struct {
+	resolved []string
+}
+
+func (s *recordingVersionSource) LatestRelease(context.Context, Repository) (string, bool, error) {
+	return "v4.2.2", true, nil
+}
+
+func (s *recordingVersionSource) Tags(context.Context, Repository) ([]string, error) {
+	return nil, nil
+}
+
+func (s *recordingVersionSource) ResolveTag(_ context.Context, _ Repository, tag string) (string, bool, error) {
+	s.resolved = append(s.resolved, tag)
+	return "0123456789abcdef0123456789abcdef01234567", true, nil
+}
+
+func TestVersionServiceLatestDoesNotResolveMajorTag(t *testing.T) {
+	source := &recordingVersionSource{}
+
+	version, err := NewVersionService(source).Latest(context.Background(), "actions/checkout")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if version.Tag != "v4.2.2" || len(source.resolved) != 1 || source.resolved[0] != "v4.2.2" {
+		t.Fatalf("version=%#v resolved=%v", version, source.resolved)
+	}
+}
+
 func TestVersionServiceFallsBackToHighestStableTag(t *testing.T) {
 	service := NewVersionService(fakeVersionSource{
 		tags: []string{"v3.0.0-beta.1", "v1.9.0", "v2.1.0", "v2"},

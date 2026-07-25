@@ -35,6 +35,7 @@ gh extension install joshuadavidthomas/gh-actionkit
 | Task | Command |
 | --- | --- |
 | Find an Action by purpose | `gh actionkit search "QUERY" --json` |
+| Inspect an Action's repository, manifest, and stable pin | `gh actionkit inspect OWNER/REPO --json` |
 | Resolve an Action's stable tags and full SHAs | `gh actionkit version OWNER/REPO --json` |
 | Print a full-SHA-pinned `uses:` line | `gh actionkit version OWNER/REPO --snippet` |
 | Find stale or unknown Action refs | `gh actionkit check -C PATH --json` |
@@ -46,10 +47,11 @@ Use `--json` when another tool or the agent will read the result. Human output m
 
 ## Find and pin an Action
 
-1. Run `search` when the user has a capability in mind but no repository. Search only proves that a repository has a root `action.yml` or `action.yaml`; inspect its owner, maintenance, manifest, permissions, and code before adding it.
-2. Run `version OWNER/REPO --json` for structured version data or `version OWNER/REPO --snippet` for a copy-ready `uses:` line.
-3. With JSON output, confirm that `latest.sha` is a non-null, 40-character hexadecimal commit SHA. Stop without editing if it is missing or malformed.
-4. Use that SHA for an exact pin and put `latest.tag` in a comment. Snippet output does this for you:
+1. Run `search` when the user has a capability in mind but no repository. Search only proves that a repository has a root `action.yml` or `action.yaml`.
+2. Run `inspect OWNER/REPO --json` for repository ownership, archived state, last push, license, and the latest stable release's manifest inputs, outputs, runtime, and pinned reference. Inspect permissions and source code separately before adding it.
+3. Run `version OWNER/REPO --json` when only version data is needed, or add `--snippet` for a copy-ready `uses:` line.
+4. With JSON output, confirm that `latest.sha` is a non-null, 40-character hexadecimal commit SHA. Stop without editing if it is missing or malformed.
+5. Use that SHA for an exact pin and put `latest.tag` in a comment. Snippet output does this for you:
 
 ```yaml
 - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
