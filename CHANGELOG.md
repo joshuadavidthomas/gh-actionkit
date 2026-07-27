@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Report full commit SHAs that differ from current stable refs as unknown instead of assuming an update is available.
+
 ## [0.3.0]
 
 ### Added

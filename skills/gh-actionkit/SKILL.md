@@ -89,6 +89,6 @@ Keep stdout for JSON. Put notes and diagnostics on stderr or outside captured co
 - Repository commands accept `-C PATH` or `--repo PATH`; both default to the current directory.
 - Workflow scans cover `.yml` and `.yaml` files directly inside `.github/workflows`.
 - `check` reads job-level reusable workflows and step-level Actions. It ignores local paths and `docker://` uses.
-- Branches and unresolved refs appear as unknown rather than outdated.
+- Branches, unresolved refs, and full SHAs that differ from the current stable refs appear as unknown rather than outdated. A SHA alone does not prove commit order.
 - `version` prefers the latest stable release, then a stable semantic tag. If neither exists, it may fall back to a non-semantic tag; it rejects semantic prerelease tags.
 - Use `gh actionkit COMMAND --help` if installed behavior differs from this skill.

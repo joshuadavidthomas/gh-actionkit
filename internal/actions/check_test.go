@@ -154,6 +154,29 @@ func TestCheckDoesNotTrustMissingMajorTagName(t *testing.T) {
 	}
 }
 
+func TestCheckTreatsDifferentPinnedSHAAsUnknown(t *testing.T) {
+	latestSHA := "4444444444444444444444444444444444444444"
+	usedSHA := "5555555555555555555555555555555555555555"
+	source := fakeVersionSource{
+		release:      "v4.2.2",
+		releaseFound: true,
+		refs:         map[string]string{"v4": latestSHA, "v4.2.2": latestSHA},
+	}
+	uses := []ActionUse{{
+		Action:     "owner/action",
+		Repository: Repository{Owner: "owner", Name: "action"},
+		Ref:        usedSHA,
+	}}
+
+	results, err := NewCheckService(source).Check(context.Background(), uses)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !results[0].Pinned || results[0].UpToDate || results[0].UpdateAvailable {
+		t.Fatalf("different pinned SHA should be unknown: %#v", results[0])
+	}
+}
+
 func TestCheckDoesNotCallNewerPrereleaseAnUpdate(t *testing.T) {
 	source := fakeVersionSource{
 		release:      "v4.2.2",

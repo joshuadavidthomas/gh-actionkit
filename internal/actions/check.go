@@ -243,11 +243,8 @@ func shaMatches(left, right *string) bool {
 }
 
 func hasNewerStableVersion(usedRef string, usedSHA *string, latest Version) bool {
-	if usedSHA == nil || latest.SHA == nil {
+	if usedSHA == nil || latest.SHA == nil || commitSHAPattern.MatchString(usedRef) {
 		return false
-	}
-	if commitSHAPattern.MatchString(usedRef) {
-		return !shaMatches(usedSHA, latest.SHA)
 	}
 	usedVersion, usedErr := semver.NewVersion(usedRef)
 	latestVersion, latestErr := semver.NewVersion(latest.Tag)
