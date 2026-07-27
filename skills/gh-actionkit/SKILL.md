@@ -35,7 +35,7 @@ Stop if the installed version remains too old. `version`, `search`, `check`, and
 | Resolve an Action's stable tags and full SHAs | `gh actionkit version OWNER/REPO --json` |
 | Print a full-SHA-pinned `uses:` line | `gh actionkit version OWNER/REPO --snippet` |
 | Find stale or unknown Action refs | `gh actionkit check -C PATH --json` |
-| Enforce Action ref and owner policies | `gh actionkit check -C PATH --require-sha --fail-on-unknown --json` |
+| Enforce Action ref and owner policies | `gh actionkit check -C PATH --require-sha --fail-on-unknown --allow-owner actions --allow-owner github --json` |
 | Validate workflow syntax and expressions | `gh actionkit validate -C PATH --json` |
 | Audit workflow security | `gh actionkit lint -C PATH --json` |
 
