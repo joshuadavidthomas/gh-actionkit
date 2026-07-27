@@ -75,7 +75,6 @@ func newLintCommandWithLint(lint workflowLint) *cobra.Command {
 	var repository string
 	var outputJSON bool
 	var pedantic bool
-	var noPedantic bool
 	var offline bool
 
 	command := &cobra.Command{
@@ -90,9 +89,6 @@ func newLintCommandWithLint(lint workflowLint) *cobra.Command {
 			repositoryPath, err := resolveRepository(repository)
 			if err != nil {
 				return err
-			}
-			if noPedantic {
-				pedantic = false
 			}
 			exitCode, err := lint(
 				command.Context(),
@@ -114,11 +110,9 @@ func newLintCommandWithLint(lint workflowLint) *cobra.Command {
 			return nil
 		},
 	}
-	command.Flags().StringVarP(&repository, "repo", "C", ".", "repository path to inspect")
+	command.Flags().StringVarP(&repository, "repo", "C", ".", "repository path to audit")
 	command.Flags().BoolVar(&outputJSON, "json", false, "output zizmor JSON")
 	command.Flags().BoolVar(&pedantic, "pedantic", false, "enable zizmor pedantic audits")
-	command.Flags().BoolVar(&noPedantic, "no-pedantic", false, "disable zizmor pedantic audits")
 	command.Flags().BoolVar(&offline, "offline", false, "disable zizmor online audits")
-	command.MarkFlagsMutuallyExclusive("pedantic", "no-pedantic")
 	return command
 }

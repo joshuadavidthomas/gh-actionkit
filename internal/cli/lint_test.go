@@ -145,24 +145,20 @@ func TestLintForwardsOptionsAndStatus(t *testing.T) {
 	}
 }
 
-func TestLintNoPedanticOverridesDefault(t *testing.T) {
-	lint := func(_ context.Context, _ string, options lintOptions, _, _ io.Writer) (int, error) {
-		if options.Pedantic {
-			t.Fatal("pedantic should be disabled")
-		}
-		return 0, nil
-	}
+func TestLintRejectsRemovedNoPedanticFlag(t *testing.T) {
 	command := commandForTest(
-		newLintCommandWithLint(lint),
+		newLintCommandWithLint(func(context.Context, string, lintOptions, io.Writer, io.Writer) (int, error) {
+			t.Fatal("lint should not run with an unknown flag")
+			return 0, nil
+		}),
 		&bytes.Buffer{},
 		&bytes.Buffer{},
-		"-C",
-		t.TempDir(),
 		"--no-pedantic",
 	)
 
-	if err := command.Execute(); err != nil {
-		t.Fatal(err)
+	err := command.Execute()
+	if err == nil || !strings.Contains(err.Error(), "unknown flag: --no-pedantic") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

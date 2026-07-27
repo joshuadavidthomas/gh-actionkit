@@ -22,7 +22,7 @@ gh extension upgrade actionkit                       # if older than v0.3.0
 gh auth status                                       # before GitHub-backed commands
 ```
 
-Stop if the installed version remains too old. `version`, `search`, `check`, and online `lint` use the active GitHub CLI account. Set `GH_HOST` when the user needs a non-default authenticated host.
+Stop if the installed version remains too old. `version`, `search`, `inspect`, `check`, and online `lint` use the active GitHub CLI account. Set `GH_HOST` when the user needs a non-default authenticated host.
 
 `lint` uses an installed `zizmor` binary. If zizmor is absent but `uv` is present, gh-actionkit runs its pinned zizmor package through uv. If both are absent, install zizmor from <https://docs.zizmor.sh/installation>.
 
@@ -82,7 +82,7 @@ Keep stdout for JSON. Put notes and diagnostics on stderr or outside captured co
 
 ## Scope and edge cases
 
-- Repository commands accept `-C PATH` or `--repo PATH`; both default to the current directory.
+- `check`, `lint`, and `validate` accept `-C PATH` or `--repo PATH`; both default to the current directory.
 - Workflow scans cover `.yml` and `.yaml` files directly inside `.github/workflows`.
 - `check` reads job-level reusable workflows and step-level Actions. It ignores local paths and `docker://` uses.
 - Branches, unresolved refs, and full SHAs that differ from the current stable refs appear as unknown rather than outdated. A SHA alone does not prove commit order.
