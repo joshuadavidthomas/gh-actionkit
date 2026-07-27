@@ -3,8 +3,39 @@ package workflow
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 )
+
+func TestFindFilesReturnsSortedDirectWorkflowYAMLFiles(t *testing.T) {
+	repository := t.TempDir()
+	workflowDirectory := filepath.Join(repository, ".github", "workflows")
+	if err := os.MkdirAll(filepath.Join(workflowDirectory, "nested"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for path, content := range map[string]string{
+		"z.yaml":             "name: Z",
+		"a.yml":              "name: A",
+		"ignored.txt":        "ignored",
+		"nested/ignored.yml": "name: Nested",
+	} {
+		if err := os.WriteFile(filepath.Join(workflowDirectory, path), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	files, err := FindFiles(repository)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		filepath.Join(workflowDirectory, "a.yml"),
+		filepath.Join(workflowDirectory, "z.yaml"),
+	}
+	if !reflect.DeepEqual(files, want) {
+		t.Fatalf("got files %#v, want %#v", files, want)
+	}
+}
 
 func TestScanRepositoryFindsStructuredRemoteUses(t *testing.T) {
 	repository := t.TempDir()

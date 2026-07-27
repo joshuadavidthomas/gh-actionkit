@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Require the agent skill to verify gh-actionkit v0.3.0 or newer and upgrade older extension installs before use.
 - Name every GitHub-backed command and limit repository path guidance to `check`, `lint`, and `validate` in the agent skill.
+- Use one workflow file discovery path for Action checking and validation.
 
 ### Removed
 

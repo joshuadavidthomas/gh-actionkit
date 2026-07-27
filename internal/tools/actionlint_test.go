@@ -41,22 +41,3 @@ func TestActionlintValidatesDirectWorkflowFilesAsJSONLines(t *testing.T) {
 		t.Fatalf("expected JSON Lines output, got %q", stdout.String())
 	}
 }
-
-func TestWorkflowFilesIgnoreNestedWorkflows(t *testing.T) {
-	repository := t.TempDir()
-	nested := filepath.Join(repository, ".github", "workflows", "nested")
-	if err := os.MkdirAll(nested, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(nested, "ignored.yml"), []byte("invalid"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	files, err := workflowFiles(repository)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(files) != 0 {
-		t.Fatalf("unexpected files: %#v", files)
-	}
-}

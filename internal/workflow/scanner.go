@@ -17,7 +17,7 @@ type ScanResult struct {
 }
 
 func ScanRepository(repository string) (ScanResult, error) {
-	files, err := files(repository)
+	files, err := FindFiles(repository)
 	if err != nil {
 		return ScanResult{}, err
 	}
@@ -32,7 +32,7 @@ func ScanRepository(repository string) (ScanResult, error) {
 	return result, nil
 }
 
-func files(repository string) ([]string, error) {
+func FindFiles(repository string) ([]string, error) {
 	directory := filepath.Join(repository, ".github", "workflows")
 	entries, err := os.ReadDir(directory)
 	if os.IsNotExist(err) {

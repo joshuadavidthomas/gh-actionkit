@@ -2,11 +2,8 @@ package tools
 
 import (
 	"io"
-	"os"
-	"path/filepath"
-	"sort"
-	"strings"
 
+	"github.com/joshuadavidthomas/gh-actionkit/internal/workflow"
 	"github.com/rhysd/actionlint"
 )
 
@@ -20,7 +17,7 @@ type ValidationResult struct {
 type Actionlint struct{}
 
 func (Actionlint) Validate(repository string, outputJSON bool, stdout, stderr io.Writer) (ValidationResult, error) {
-	files, err := workflowFiles(repository)
+	files, err := workflow.FindFiles(repository)
 	if err != nil || len(files) == 0 {
 		return ValidationResult{}, err
 	}
@@ -48,28 +45,4 @@ func (Actionlint) Validate(repository string, outputJSON bool, stdout, stderr io
 		return ValidationResult{}, err
 	}
 	return ValidationResult{Files: len(files), Findings: len(findings)}, nil
-}
-
-func workflowFiles(repository string) ([]string, error) {
-	directory := filepath.Join(repository, ".github", "workflows")
-	entries, err := os.ReadDir(directory)
-	if os.IsNotExist(err) {
-		return []string{}, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-
-	files := make([]string, 0, len(entries))
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-		name := entry.Name()
-		if strings.HasSuffix(name, ".yml") || strings.HasSuffix(name, ".yaml") {
-			files = append(files, filepath.Join(directory, name))
-		}
-	}
-	sort.Strings(files)
-	return files, nil
 }
