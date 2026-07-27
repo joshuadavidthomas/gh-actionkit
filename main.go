@@ -17,7 +17,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	if err := cli.NewRootCommand(version, os.Stdout, os.Stderr).ExecuteContext(ctx); err != nil {
+	if err := cli.NewRootCommand(version, bundledSkill, os.Stdout, os.Stderr).ExecuteContext(ctx); err != nil {
 		exitCode := 2
 		var statusError interface{ ExitCode() int }
 		if errors.As(err, &statusError) {

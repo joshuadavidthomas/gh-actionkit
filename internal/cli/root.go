@@ -6,7 +6,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func NewRootCommand(version string, stdout, stderr io.Writer) *cobra.Command {
+func NewRootCommand(version string, skill []byte, stdout, stderr io.Writer) *cobra.Command {
 	command := &cobra.Command{
 		Use:           "actionkit",
 		Short:         "Find, check, and validate GitHub Actions",
@@ -23,6 +23,7 @@ func NewRootCommand(version string, stdout, stderr io.Writer) *cobra.Command {
 		newLintCommand(),
 		newValidateCommand(),
 		newCheckCommand(),
+		newSkillCommand(skill),
 	)
 	return command
 }

@@ -74,6 +74,16 @@ claude plugin install gh-actionkit@gh-actionkit
 | `check` | Find outdated Action refs in a repository's workflows |
 | `lint` | Audit workflows with zizmor |
 | `validate` | Validate workflow syntax with the embedded actionlint library |
+| `skill` | Print the bundled gh-actionkit agent skill |
+
+### Print the agent skill
+
+```console
+gh actionkit skill
+gh actionkit skill > SKILL.md
+```
+
+`skill` writes the exact bundled `SKILL.md` content to stdout.
 
 ### Look up a version
 

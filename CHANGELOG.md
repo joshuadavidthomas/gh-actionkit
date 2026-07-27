@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add `skill` to print the exact bundled `SKILL.md` content to stdout.
+
 ### Changed
 
 - Require the agent skill to verify gh-actionkit v0.3.0 or newer and upgrade older extension installs before use.
