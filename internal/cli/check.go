@@ -73,24 +73,24 @@ func newCheckCommandWithCheck(check actionCheck) *cobra.Command {
 				FailOnUnknown: failOnUnknown,
 				AllowedOwners: allowedOwners,
 			})
+			emptyMessage := checkEmptyMessage(report)
 			if outputJSON {
 				encoder := json.NewEncoder(command.OutOrStdout())
 				encoder.SetIndent("", "  ")
 				if err := encoder.Encode(report.Results); err != nil {
 					return err
 				}
-			} else {
-				switch {
-				case report.WorkflowFiles == 0:
-					_, err = fmt.Fprintln(command.OutOrStdout(), "No workflow files found in .github/workflows")
-				case report.Uses == 0:
-					_, err = fmt.Fprintln(command.OutOrStdout(), "No remote action uses found in workflow files")
-				default:
-					err = writeCheckResults(command.OutOrStdout(), report.Results)
+				if emptyMessage != "" {
+					if _, err := fmt.Fprintln(command.ErrOrStderr(), emptyMessage); err != nil {
+						return err
+					}
 				}
-				if err != nil {
+			} else if emptyMessage != "" {
+				if _, err := fmt.Fprintln(command.OutOrStdout(), emptyMessage); err != nil {
 					return err
 				}
+			} else if err := writeCheckResults(command.OutOrStdout(), report.Results); err != nil {
+				return err
 			}
 			for _, result := range report.Results {
 				if result.UpdateAvailable || len(result.PolicyViolations) > 0 {
@@ -106,6 +106,17 @@ func newCheckCommandWithCheck(check actionCheck) *cobra.Command {
 	command.Flags().BoolVar(&failOnUnknown, "fail-on-unknown", false, "fail when an Action ref cannot be classified")
 	command.Flags().StringSliceVar(&allowedOwners, "allow-owner", nil, "allow remote Actions from this owner (repeatable)")
 	return command
+}
+
+func checkEmptyMessage(report actions.CheckReport) string {
+	switch {
+	case report.WorkflowFiles == 0:
+		return "No workflow files found in .github/workflows"
+	case report.Uses == 0:
+		return "No remote action uses found in workflow files"
+	default:
+		return ""
+	}
 }
 
 func writeCheckResults(output io.Writer, results []actions.CheckResult) error {

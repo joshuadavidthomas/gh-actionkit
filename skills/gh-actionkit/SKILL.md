@@ -71,7 +71,7 @@ Add `--pedantic` to `lint` for stricter zizmor audits. Online audits are the def
 
 ## Read output and status together
 
-- `check` exits 1 when an update or requested policy violation is present. Its JSON output is still the result, not a command failure.
+- `check` exits 1 when an update or requested policy violation is present. Its JSON output is still the result, not a command failure. When it returns `[]`, read stderr to distinguish no workflows or no remote Action uses from a clean scan.
 - Add `--require-sha` to reject moving refs, `--fail-on-unknown` to reject unclassified refs, and repeat `--allow-owner OWNER` to restrict remote Actions by owner.
 - `validate` exits 1 when actionlint finds a problem. `--json` emits JSON Lines, not one JSON array.
 - `lint` preserves zizmor's exit status and output.

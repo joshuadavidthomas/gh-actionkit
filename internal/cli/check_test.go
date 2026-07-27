@@ -128,18 +128,54 @@ func TestCheckUnknownDoesNotFailWithoutPolicy(t *testing.T) {
 	}
 }
 
-func TestCheckEmptyJSONIsAnArray(t *testing.T) {
-	check := func(context.Context, string) (actions.CheckReport, error) {
-		return actions.CheckReport{Results: []actions.CheckResult{}}, nil
+func TestCheckEmptyJSONExplainsScanResultOnStderr(t *testing.T) {
+	tests := []struct {
+		name       string
+		report     actions.CheckReport
+		wantStderr string
+	}{
+		{
+			name:       "no workflow files",
+			report:     actions.CheckReport{Results: []actions.CheckResult{}},
+			wantStderr: "No workflow files found in .github/workflows\n",
+		},
+		{
+			name: "no remote action uses",
+			report: actions.CheckReport{
+				WorkflowFiles: 1,
+				Results:       []actions.CheckResult{},
+			},
+			wantStderr: "No remote action uses found in workflow files\n",
+		},
+		{
+			name: "clean result",
+			report: actions.CheckReport{
+				WorkflowFiles: 1,
+				Uses:          1,
+				Results:       []actions.CheckResult{},
+			},
+		},
 	}
-	var stdout bytes.Buffer
-	command := commandForTest(newCheckCommandWithCheck(check), &stdout, &bytes.Buffer{}, "-C", t.TempDir(), "--json")
 
-	if err := command.Execute(); err != nil {
-		t.Fatal(err)
-	}
-	if stdout.String() != "[]\n" {
-		t.Fatalf("unexpected JSON: %q", stdout.String())
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			check := func(context.Context, string) (actions.CheckReport, error) {
+				return test.report, nil
+			}
+			var stdout bytes.Buffer
+			var stderr bytes.Buffer
+			command := commandForTest(newCheckCommandWithCheck(check), &stdout, &stderr, "-C", t.TempDir(), "--json")
+
+			if err := command.Execute(); err != nil {
+				t.Fatal(err)
+			}
+			if stdout.String() != "[]\n" {
+				t.Fatalf("unexpected JSON: %q", stdout.String())
+			}
+			if stderr.String() != test.wantStderr {
+				t.Fatalf("unexpected stderr: %q", stderr.String())
+			}
+		})
 	}
 }
 

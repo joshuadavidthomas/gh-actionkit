@@ -113,7 +113,7 @@ gh actionkit check --require-sha --fail-on-unknown
 gh actionkit check --allow-owner actions --allow-owner github
 ```
 
-`check` exits with status 1 when it finds an update. Use `--require-sha` to reject moving refs, `--fail-on-unknown` to reject refs that cannot be classified, and repeat `--allow-owner` to restrict remote Actions to named owners. Unresolved branches and full SHAs that do not match the current stable or major ref are reported as unknown. A SHA alone does not reveal whether its commit is older or newer than a release.
+`check` exits with status 1 when it finds an update. Use `--require-sha` to reject moving refs, `--fail-on-unknown` to reject refs that cannot be classified, and repeat `--allow-owner` to restrict remote Actions to named owners. Unresolved branches and full SHAs that do not match the current stable or major ref are reported as unknown. A SHA alone does not reveal whether its commit is older or newer than a release. With `--json`, an empty result remains `[]` on stdout while stderr states whether the repository has no workflow files or no remote Action uses.
 
 ### Lint and validate workflows
 

@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Include allowed owners in the agent skill's Action policy command.
+- Explain empty `check --json` scans on stderr while keeping stdout valid JSON.
 - Report full commit SHAs that differ from current stable refs as unknown instead of assuming an update is available.
 
 ## [0.3.0]
