@@ -5,6 +5,7 @@ license: MIT
 compatibility: Requires the GitHub CLI (`gh`) and gh-actionkit v0.3.0 or newer. GitHub-backed commands need `gh` authentication; linting needs either zizmor or uv.
 metadata:
   author: joshuadavidthomas
+  version: "0.4.0"
 ---
 
 # gh-actionkit

@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0]
+
 ### Added
 
 - Add `skill` to print the exact bundled `SKILL.md` content to stdout.
@@ -59,7 +61,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `version`, `search`, `check`, `lint`, and `validate` commands.
 - Added precompiled GitHub CLI extension releases for Linux, macOS, and Windows.
 
-[Unreleased]: https://github.com/joshuadavidthomas/gh-actionkit/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/joshuadavidthomas/gh-actionkit/compare/v0.4.0...HEAD
 [0.1.0]: https://github.com/joshuadavidthomas/gh-actionkit/releases/tag/v0.1.0
 [0.2.0]: https://github.com/joshuadavidthomas/gh-actionkit/releases/tag/v0.2.0
 [0.3.0]: https://github.com/joshuadavidthomas/gh-actionkit/releases/tag/v0.3.0
+[0.4.0]: https://github.com/joshuadavidthomas/gh-actionkit/releases/tag/v0.4.0
