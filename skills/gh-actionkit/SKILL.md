@@ -2,7 +2,7 @@
 name: gh-actionkit
 description: Use when finding GitHub Actions, choosing or pinning action versions, checking workflow action refs for updates, validating GitHub Actions workflow syntax, or auditing workflows with actionlint or zizmor. Handles gh-actionkit, `gh actionkit`, workflow YAML, full commit SHA pins, stale actions, unpinned actions, and GitHub Actions security checks.
 license: MIT
-compatibility: Requires the GitHub CLI (`gh`). GitHub-backed commands need `gh` authentication; linting needs either zizmor or uv.
+compatibility: Requires the GitHub CLI (`gh`) and gh-actionkit v0.3.0 or newer. GitHub-backed commands need `gh` authentication; linting needs either zizmor or uv.
 metadata:
   author: joshuadavidthomas
 ---
@@ -13,20 +13,16 @@ gh-actionkit is a GitHub CLI extension for finding Actions and checking workflow
 
 ## Set up
 
-Check the extension and GitHub authentication before using commands that call GitHub:
+Require gh-actionkit v0.3.0 or newer. Run only the needed setup commands:
 
 ```console
 gh actionkit --version
-gh auth status
+gh extension install joshuadavidthomas/gh-actionkit  # if missing
+gh extension upgrade actionkit                       # if older than v0.3.0
+gh auth status                                       # before GitHub-backed commands
 ```
 
-If the extension is missing, install it:
-
-```console
-gh extension install joshuadavidthomas/gh-actionkit
-```
-
-`version`, `search`, `check`, and online `lint` use the active GitHub CLI account. Set `GH_HOST` when the user needs a non-default authenticated host.
+Stop if the installed version remains too old. `version`, `search`, `check`, and online `lint` use the active GitHub CLI account. Set `GH_HOST` when the user needs a non-default authenticated host.
 
 `lint` uses an installed `zizmor` binary. If zizmor is absent but `uv` is present, gh-actionkit runs its pinned zizmor package through uv. If both are absent, install zizmor from <https://docs.zizmor.sh/installation>.
 
@@ -91,4 +87,4 @@ Keep stdout for JSON. Put notes and diagnostics on stderr or outside captured co
 - `check` reads job-level reusable workflows and step-level Actions. It ignores local paths and `docker://` uses.
 - Branches, unresolved refs, and full SHAs that differ from the current stable refs appear as unknown rather than outdated. A SHA alone does not prove commit order.
 - `version` prefers the latest stable release, then a stable semantic tag. If neither exists, it may fall back to a non-semantic tag; it rejects semantic prerelease tags.
-- Use `gh actionkit COMMAND --help` if installed behavior differs from this skill.
+- If a documented command is absent, verify gh-actionkit is v0.3.0 or newer instead of improvising.
