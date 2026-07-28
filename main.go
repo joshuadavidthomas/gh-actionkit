@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"syscall"
@@ -24,8 +25,12 @@ func main() {
 			exitCode = statusError.ExitCode()
 		}
 		if err.Error() != "" {
-			fmt.Fprintln(os.Stderr, err)
+			writeTerminalError(os.Stderr, err)
 		}
 		os.Exit(exitCode)
 	}
+}
+
+func writeTerminalError(output io.Writer, err error) {
+	_, _ = fmt.Fprintln(output, cli.FormatErrorForTerminal(err))
 }

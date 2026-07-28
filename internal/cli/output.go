@@ -3,6 +3,7 @@ package cli
 import (
 	"io"
 	"os"
+	"strings"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
@@ -10,6 +11,29 @@ import (
 )
 
 const fallbackTerminalWidth = 80
+
+// sanitizeTerminal replaces terminal control characters while preserving
+// newlines and tabs for callers that render multiline text.
+func sanitizeTerminal(value string) string {
+	return strings.Map(func(r rune) rune {
+		if r < 0x20 && r != '\n' && r != '\t' || r >= 0x7f && r <= 0x9f {
+			return '\uFFFD'
+		}
+		return r
+	}, value)
+}
+
+// sanitizeTerminalLine replaces all terminal control characters, including
+// newlines and tabs, for values rendered on one line.
+func sanitizeTerminalLine(value string) string {
+	value = strings.NewReplacer("\n", `\n`, "\t", `\t`).Replace(value)
+	return sanitizeTerminal(value)
+}
+
+// FormatErrorForTerminal returns an error message safe to print to a terminal.
+func FormatErrorForTerminal(err error) string {
+	return sanitizeTerminalLine(err.Error())
+}
 
 type outputStyles struct {
 	action    lipgloss.Style

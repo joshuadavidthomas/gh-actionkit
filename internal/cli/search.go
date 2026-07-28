@@ -72,11 +72,11 @@ func writeSearchResults(output io.Writer, results []actions.SearchResult) error 
 
 	for _, result := range results {
 		details := styles.secondary.Render(fmt.Sprintf("(⭐ %s)", formatStars(result.Stars)))
-		if _, err := fmt.Fprintf(output, "%s %s\n", actionStyle.Render(result.Action), details); err != nil {
+		if _, err := fmt.Fprintf(output, "%s %s\n", actionStyle.Render(sanitizeTerminalLine(result.Action)), details); err != nil {
 			return err
 		}
 		if result.Description != nil && *result.Description != "" {
-			if _, err := fmt.Fprintf(output, "  %s\n", *result.Description); err != nil {
+			if _, err := fmt.Fprintf(output, "  %s\n", sanitizeTerminalLine(*result.Description)); err != nil {
 				return err
 			}
 		}

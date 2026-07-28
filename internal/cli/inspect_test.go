@@ -154,6 +154,71 @@ func TestInspectWritesHumanOutput(t *testing.T) {
 	}
 }
 
+func TestInspectSanitizesHumanOutputAndPreservesJSON(t *testing.T) {
+	description := "link \x1b]8;;https://evil.example\x07click\x1b]8;;\x07"
+	defaultValue := "evil\x1b[2Jtext"
+	inspect := func(context.Context, string) (actions.InspectResult, error) {
+		return actions.InspectResult{
+			Action: "owner/evil\x1b[2Jaction",
+			Repository: actions.RepositoryDetails{
+				Owner:       actions.RepositoryOwner{Login: "owner"},
+				Description: &description,
+			},
+			Manifest: actions.ActionManifest{
+				Name:        "Evil",
+				Description: description,
+				Inputs: []actions.ManifestInput{{
+					Name:        "payload",
+					Description: &description,
+					Default:     &defaultValue,
+				}},
+				Outputs: []actions.ManifestOutput{},
+			},
+		}, nil
+	}
+
+	var humanOutput bytes.Buffer
+	humanCommand := commandForTest(
+		newInspectCommandWithInspect(inspect),
+		&humanOutput,
+		&bytes.Buffer{},
+		"owner/evil",
+	)
+	if err := humanCommand.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if strings.ContainsRune(humanOutput.String(), '\x1b') {
+		t.Fatalf("human output contains untrusted ESC: %q", humanOutput.String())
+	}
+	for _, text := range []string{"owner/evil�[2Jaction", "evil�[2Jtext", "link �]8;;https://evil.example�click�]8;;�"} {
+		if !strings.Contains(humanOutput.String(), text) {
+			t.Errorf("human output does not contain %q: %q", text, humanOutput.String())
+		}
+	}
+
+	var jsonOutput bytes.Buffer
+	jsonCommand := commandForTest(
+		newInspectCommandWithInspect(inspect),
+		&jsonOutput,
+		&bytes.Buffer{},
+		"owner/evil",
+		"--json",
+	)
+	if err := jsonCommand.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	var result actions.InspectResult
+	if err := json.Unmarshal(jsonOutput.Bytes(), &result); err != nil {
+		t.Fatalf("invalid JSON %q: %v", jsonOutput.String(), err)
+	}
+	if result.Action != "owner/evil\x1b[2Jaction" || result.Manifest.Description != description {
+		t.Fatalf("JSON changed control-character payload: %#v", result)
+	}
+	if result.Manifest.Inputs[0].Default == nil || *result.Manifest.Inputs[0].Default != defaultValue {
+		t.Fatalf("JSON changed default payload: %#v", result.Manifest.Inputs)
+	}
+}
+
 func TestInspectReportsUnknownOptionalValues(t *testing.T) {
 	inspect := func(context.Context, string) (actions.InspectResult, error) {
 		return actions.InspectResult{
