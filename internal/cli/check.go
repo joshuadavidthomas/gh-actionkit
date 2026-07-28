@@ -93,7 +93,7 @@ func newCheckCommandWithCheck(check actionCheck) *cobra.Command {
 				return err
 			}
 			for _, result := range report.Results {
-				if result.UpdateAvailable || len(result.PolicyViolations) > 0 {
+				if result.Status == actions.CheckStatusUpdateAvailable || len(result.PolicyViolations) > 0 {
 					return StatusError{Code: 1}
 				}
 			}

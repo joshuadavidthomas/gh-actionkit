@@ -31,6 +31,14 @@ type CheckVersion struct {
 	SHA *string `json:"sha"`
 }
 
+type CheckStatus string
+
+const (
+	CheckStatusUpToDate        CheckStatus = "up_to_date"
+	CheckStatusUpdateAvailable CheckStatus = "update_available"
+	CheckStatusUnknown         CheckStatus = "unknown"
+)
+
 type PolicyViolation string
 
 const (
@@ -46,8 +54,7 @@ type CheckResult struct {
 	Used             CheckVersion      `json:"used"`
 	Major            CheckVersion      `json:"major"`
 	Latest           CheckVersion      `json:"latest"`
-	UpToDate         bool              `json:"up_to_date"`
-	UpdateAvailable  bool              `json:"update_available"`
+	Status           CheckStatus       `json:"status"`
 	PolicyViolations []PolicyViolation `json:"policy_violations,omitempty"`
 	Locations        []Location        `json:"locations"`
 }
@@ -126,7 +133,7 @@ func ApplyCheckPolicy(results []CheckResult, policy CheckPolicy) []CheckResult {
 		if policy.RequireSHA && !result.Pinned {
 			result.PolicyViolations = append(result.PolicyViolations, PolicyViolationUnpinned)
 		}
-		if policy.FailOnUnknown && !result.UpToDate && !result.UpdateAvailable {
+		if policy.FailOnUnknown && result.Status == CheckStatusUnknown {
 			result.PolicyViolations = append(result.PolicyViolations, PolicyViolationUnknown)
 		}
 		if len(allowedOwners) > 0 {
@@ -204,7 +211,8 @@ func (s CheckService) newResult(
 	result := &CheckResult{
 		Action: use.Action,
 		Ref:    use.Ref,
-		Pinned: commitSHAPattern.MatchString(use.Ref),
+		Pinned: IsCommitSHA(use.Ref),
+		Status: CheckStatusUnknown,
 	}
 	if result.Pinned {
 		result.Used.SHA = stringPointer(use.Ref)
@@ -224,10 +232,16 @@ func (s CheckService) newResult(
 	}
 	result.Major = checkVersion(version.Major)
 	result.Latest = checkVersion(version.Latest)
-	result.UpToDate = shaMatches(result.Used.SHA, version.Major.SHA) ||
-		shaMatches(result.Used.SHA, version.Latest.SHA)
-	result.UpdateAvailable = !result.UpToDate && hasNewerStableVersion(use.Ref, result.Used.SHA, version.Latest)
+	if shaMatches(result.Used.SHA, version.Major.SHA) || shaMatches(result.Used.SHA, version.Latest.SHA) {
+		result.Status = CheckStatusUpToDate
+	} else if hasNewerStableVersion(use.Ref, result.Used.SHA, version.Latest) {
+		result.Status = CheckStatusUpdateAvailable
+	}
 	return result, nil
+}
+
+func IsCommitSHA(ref string) bool {
+	return commitSHAPattern.MatchString(ref)
 }
 
 func checkVersion(version Version) CheckVersion {
@@ -243,7 +257,7 @@ func shaMatches(left, right *string) bool {
 }
 
 func hasNewerStableVersion(usedRef string, usedSHA *string, latest Version) bool {
-	if usedSHA == nil || latest.SHA == nil || commitSHAPattern.MatchString(usedRef) {
+	if usedSHA == nil || latest.SHA == nil || IsCommitSHA(usedRef) {
 		return false
 	}
 	usedVersion, usedErr := semver.NewVersion(usedRef)

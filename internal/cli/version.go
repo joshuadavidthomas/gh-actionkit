@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -68,7 +67,7 @@ func newVersionCommandWithLookup(lookup versionLookup) *cobra.Command {
 }
 
 func writeVersionSnippet(output io.Writer, info actions.VersionInfo) error {
-	if info.Latest.SHA == nil || !isFullCommitSHA(*info.Latest.SHA) {
+	if info.Latest.SHA == nil || !actions.IsCommitSHA(*info.Latest.SHA) {
 		return fmt.Errorf(
 			"cannot write snippet for %s: tag %s does not resolve to a full commit SHA",
 			info.Action,
@@ -77,14 +76,6 @@ func writeVersionSnippet(output io.Writer, info actions.VersionInfo) error {
 	}
 	_, err := fmt.Fprintf(output, "uses: %s@%s # %s\n", info.Action, *info.Latest.SHA, info.Latest.Tag)
 	return err
-}
-
-func isFullCommitSHA(value string) bool {
-	if len(value) != 40 {
-		return false
-	}
-	_, err := hex.DecodeString(value)
-	return err == nil
 }
 
 func writeVersion(output io.Writer, info actions.VersionInfo) error {

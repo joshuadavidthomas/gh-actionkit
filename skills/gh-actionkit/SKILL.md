@@ -2,10 +2,10 @@
 name: gh-actionkit
 description: Use when finding GitHub Actions, choosing or pinning action versions, checking workflow action refs for updates, validating GitHub Actions workflow syntax, or auditing workflows with actionlint or zizmor. Handles gh-actionkit, `gh actionkit`, workflow YAML, full commit SHA pins, stale actions, unpinned actions, and GitHub Actions security checks.
 license: MIT
-compatibility: Requires the GitHub CLI (`gh`) and gh-actionkit v0.3.0 or newer. GitHub-backed commands need `gh` authentication; linting needs either zizmor or uv.
+compatibility: Requires the GitHub CLI (`gh`) and gh-actionkit v0.5.0 or newer. GitHub-backed commands need `gh` authentication; linting needs either zizmor or uv.
 metadata:
   author: joshuadavidthomas
-  version: "0.4.0"
+  version: "0.5.0"
 ---
 
 # gh-actionkit
@@ -14,12 +14,12 @@ gh-actionkit is a GitHub CLI extension for finding Actions and checking workflow
 
 ## Set up
 
-Require gh-actionkit v0.3.0 or newer. Run only the needed setup commands:
+Require gh-actionkit v0.5.0 or newer. Run only the needed setup commands:
 
 ```console
 gh actionkit --version
 gh extension install joshuadavidthomas/gh-actionkit  # if missing
-gh extension upgrade actionkit                       # if older than v0.3.0
+gh extension upgrade actionkit                       # if older than v0.5.0
 gh auth status                                       # before GitHub-backed commands
 ```
 
@@ -72,7 +72,7 @@ Add `--pedantic` to `lint` for stricter zizmor audits. Online audits are the def
 
 ## Read output and status together
 
-- `check` exits 1 when an update or requested policy violation is present. Its JSON output is still the result, not a command failure. When it returns `[]`, read stderr to distinguish no workflows or no remote Action uses from a clean scan.
+- `check` exits 1 when an update or requested policy violation is present. Each JSON result has a `status` of `up_to_date`, `update_available`, or `unknown`. Its JSON output is still the result, not a command failure. When it returns `[]`, read stderr to distinguish no workflows or no remote Action uses from a clean scan.
 - Add `--require-sha` to reject moving refs, `--fail-on-unknown` to reject unclassified refs, and repeat `--allow-owner OWNER` to restrict remote Actions by owner.
 - `validate` exits 1 when actionlint finds a problem. `--json` emits JSON Lines, not one JSON array.
 - `lint` preserves zizmor's exit status and output.
@@ -88,4 +88,4 @@ Keep stdout for JSON. Put notes and diagnostics on stderr or outside captured co
 - `check` reads job-level reusable workflows and step-level Actions. It ignores local paths and `docker://` uses.
 - Branches, unresolved refs, and full SHAs that differ from the current stable refs appear as unknown rather than outdated. A SHA alone does not prove commit order.
 - `version` prefers the latest stable release, then a stable semantic tag. If neither exists, it may fall back to a non-semantic tag; it rejects semantic prerelease tags.
-- If a documented command is absent, verify gh-actionkit is v0.3.0 or newer instead of improvising.
+- If a documented command is absent, verify gh-actionkit is v0.5.0 or newer instead of improvising.

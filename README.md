@@ -42,7 +42,7 @@ pre-commit run validate --all-files
 
 ## Agent skill
 
-The [`gh-actionkit` agent skill](skills/gh-actionkit/SKILL.md) teaches coding agents how to find, pin, check, lint, and validate GitHub Actions. It requires gh-actionkit v0.3.0 or newer. Agents check the installed version and upgrade older extensions before using commands introduced in newer releases. Install the skill with any Agent Skills-compatible client.
+The [`gh-actionkit` agent skill](skills/gh-actionkit/SKILL.md) teaches coding agents how to find, pin, check, lint, and validate GitHub Actions. It requires gh-actionkit v0.5.0 or newer. Agents check the installed version and upgrade older extensions before using commands introduced in newer releases. Install the skill with any Agent Skills-compatible client.
 
 With [dotagents](https://github.com/getsentry/dotagents), initialize the target project once, then add the skill:
 

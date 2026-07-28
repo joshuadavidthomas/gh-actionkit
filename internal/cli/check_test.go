@@ -22,9 +22,9 @@ func TestCheckWritesJSONBeforeReturningFindingStatus(t *testing.T) {
 			WorkflowFiles: 1,
 			Uses:          1,
 			Results: []actions.CheckResult{{
-				Action:          "actions/checkout",
-				Used:            actions.CheckVersion{Tag: &tag},
-				UpdateAvailable: true,
+				Action: "actions/checkout",
+				Used:   actions.CheckVersion{Tag: &tag},
+				Status: actions.CheckStatusUpdateAvailable,
 			}},
 		}, nil
 	}
@@ -36,8 +36,11 @@ func TestCheckWritesJSONBeforeReturningFindingStatus(t *testing.T) {
 	if !errors.As(err, &statusError) || statusError.Code != 1 {
 		t.Fatalf("expected status 1, got %v", err)
 	}
-	if !strings.Contains(stdout.String(), `"update_available": true`) {
+	if !strings.Contains(stdout.String(), `"status": "update_available"`) {
 		t.Fatalf("unexpected JSON: %q", stdout.String())
+	}
+	if strings.Contains(stdout.String(), `"up_to_date":`) || strings.Contains(stdout.String(), `"update_available":`) {
+		t.Fatalf("unexpected legacy JSON fields: %q", stdout.String())
 	}
 	if strings.Contains(stdout.String(), `"short"`) || !strings.Contains(stdout.String(), `"major"`) {
 		t.Fatalf("unexpected version fields: %q", stdout.String())
@@ -52,6 +55,7 @@ func TestCheckPoliciesWriteViolationsBeforeReturningFindingStatus(t *testing.T) 
 			Results: []actions.CheckResult{{
 				Action: "third-party/action",
 				Ref:    "main",
+				Status: actions.CheckStatusUnknown,
 			}},
 		}, nil
 	}
@@ -87,9 +91,9 @@ func TestCheckAcceptsRepeatedAllowedOwners(t *testing.T) {
 			WorkflowFiles: 1,
 			Uses:          3,
 			Results: []actions.CheckResult{
-				{Action: "actions/checkout", UpToDate: true},
-				{Action: "github/codeql-action", UpToDate: true},
-				{Action: "third-party/action", UpToDate: true},
+				{Action: "actions/checkout", Status: actions.CheckStatusUpToDate},
+				{Action: "github/codeql-action", Status: actions.CheckStatusUpToDate},
+				{Action: "third-party/action", Status: actions.CheckStatusUpToDate},
 			},
 		}, nil
 	}
@@ -122,7 +126,11 @@ func TestCheckUnknownDoesNotFailWithoutPolicy(t *testing.T) {
 		return actions.CheckReport{
 			WorkflowFiles: 1,
 			Uses:          1,
-			Results:       []actions.CheckResult{{Action: "owner/action", Ref: "main"}},
+			Results: []actions.CheckResult{{
+				Action: "owner/action",
+				Ref:    "main",
+				Status: actions.CheckStatusUnknown,
+			}},
 		}, nil
 	}
 	command := commandForTest(newCheckCommandWithCheck(check), &bytes.Buffer{}, &bytes.Buffer{}, "-C", t.TempDir())
@@ -276,10 +284,10 @@ func TestCheckCommandEndToEnd(t *testing.T) {
 		for _, result := range results {
 			byAction[result.Action] = result
 		}
-		assertEndToEndResult(t, byAction["actions/checkout"], checkoutSHA, true, true, false, nil, 6, "", checkoutSHA, "v4", checkoutSHA, "v4.2.0", checkoutSHA)
-		assertEndToEndResult(t, byAction["actions/setup-go"], "v4", false, false, true, []actions.PolicyViolation{actions.PolicyViolationUnpinned}, 10, "v4", setupGoV4SHA, "v5", setupGoV5SHA, "v5.0.0", setupGoV5SHA)
-		assertEndToEndResult(t, byAction["example/mystery"], mysterySHA, true, false, false, []actions.PolicyViolation{actions.PolicyViolationUnknown}, 14, "", mysterySHA, "v1", "6666666666666666666666666666666666666666", "v1.0.0", "6666666666666666666666666666666666666666")
-		assertEndToEndResult(t, byAction["other/tool"], "v1", false, true, false, []actions.PolicyViolation{actions.PolicyViolationUnpinned, actions.PolicyViolationDisallowedOwner}, 18, "v1", otherToolSHA, "v1", otherToolSHA, "v1.0.0", otherToolSHA)
+		assertEndToEndResult(t, byAction["actions/checkout"], checkoutSHA, true, actions.CheckStatusUpToDate, nil, 6, "", checkoutSHA, "v4", checkoutSHA, "v4.2.0", checkoutSHA)
+		assertEndToEndResult(t, byAction["actions/setup-go"], "v4", false, actions.CheckStatusUpdateAvailable, []actions.PolicyViolation{actions.PolicyViolationUnpinned}, 10, "v4", setupGoV4SHA, "v5", setupGoV5SHA, "v5.0.0", setupGoV5SHA)
+		assertEndToEndResult(t, byAction["example/mystery"], mysterySHA, true, actions.CheckStatusUnknown, []actions.PolicyViolation{actions.PolicyViolationUnknown}, 14, "", mysterySHA, "v1", "6666666666666666666666666666666666666666", "v1.0.0", "6666666666666666666666666666666666666666")
+		assertEndToEndResult(t, byAction["other/tool"], "v1", false, actions.CheckStatusUpToDate, []actions.PolicyViolation{actions.PolicyViolationUnpinned, actions.PolicyViolationDisallowedOwner}, 18, "v1", otherToolSHA, "v1", otherToolSHA, "v1.0.0", otherToolSHA)
 	})
 
 	t.Run("human output shows each classification", func(t *testing.T) {
@@ -389,13 +397,14 @@ func assertEndToEndResult(
 	t *testing.T,
 	result actions.CheckResult,
 	ref string,
-	pinned, upToDate, updateAvailable bool,
+	pinned bool,
+	status actions.CheckStatus,
 	violations []actions.PolicyViolation,
 	line int,
 	usedTag, usedSHA, majorTag, majorSHA, latestTag, latestSHA string,
 ) {
 	t.Helper()
-	if result.Ref != ref || result.Pinned != pinned || result.UpToDate != upToDate || result.UpdateAvailable != updateAvailable {
+	if result.Ref != ref || result.Pinned != pinned || result.Status != status {
 		t.Fatalf("unexpected result: %#v", result)
 	}
 	if len(result.PolicyViolations) != len(violations) {
@@ -472,19 +481,19 @@ func TestRenderCheckResultsStylesHumanOutput(t *testing.T) {
 	sha := "0123456789abcdef0123456789abcdef01234567"
 	output := renderCheckResults([]actions.CheckResult{
 		{
-			Action:   "actions/checkout",
-			Used:     actions.CheckVersion{SHA: &sha},
-			Major:    actions.CheckVersion{Tag: testStringPointer("v4"), SHA: &sha},
-			Latest:   actions.CheckVersion{Tag: testStringPointer("v4.2.2"), SHA: &sha},
-			UpToDate: true,
+			Action: "actions/checkout",
+			Used:   actions.CheckVersion{SHA: &sha},
+			Major:  actions.CheckVersion{Tag: testStringPointer("v4"), SHA: &sha},
+			Latest: actions.CheckVersion{Tag: testStringPointer("v4.2.2"), SHA: &sha},
+			Status: actions.CheckStatusUpToDate,
 			Locations: []actions.Location{
 				{File: ".github/workflows/test.yml", Line: 12},
 				{File: ".github/workflows/release.yml", Line: 34},
 			},
 		},
 		{
-			Action:          "owner/update",
-			UpdateAvailable: true,
+			Action: "owner/update",
+			Status: actions.CheckStatusUpdateAvailable,
 			PolicyViolations: []actions.PolicyViolation{
 				actions.PolicyViolationUnpinned,
 				actions.PolicyViolationDisallowedOwner,
@@ -492,6 +501,7 @@ func TestRenderCheckResultsStylesHumanOutput(t *testing.T) {
 		},
 		{
 			Action:           "owner/unknown",
+			Status:           actions.CheckStatusUnknown,
 			PolicyViolations: []actions.PolicyViolation{actions.PolicyViolationUnknown},
 		},
 	}, 0, false)
@@ -525,8 +535,8 @@ func TestRenderCheckResultsStylesHumanOutput(t *testing.T) {
 
 func TestRenderCheckResultsUsesColorAndFitsWidth(t *testing.T) {
 	output := renderCheckResults([]actions.CheckResult{{
-		Action:          "actions/checkout",
-		UpdateAvailable: true,
+		Action: "actions/checkout",
+		Status: actions.CheckStatusUpdateAvailable,
 	}}, 80, true)
 
 	if !strings.Contains(output, "\x1b[") {

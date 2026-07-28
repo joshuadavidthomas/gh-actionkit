@@ -61,10 +61,10 @@ func TestCheckGroupsUsesAndComparesResolvedCommits(t *testing.T) {
 	for _, result := range results {
 		byRef[result.Ref] = result
 	}
-	if !byRef["v3"].UpdateAvailable || len(byRef["v3"].Locations) != 2 {
+	if byRef["v3"].Status != CheckStatusUpdateAvailable || len(byRef["v3"].Locations) != 2 {
 		t.Fatalf("unexpected v3 result: %#v", byRef["v3"])
 	}
-	if !byRef[latestSHA].UpToDate || !byRef[latestSHA].Pinned {
+	if byRef[latestSHA].Status != CheckStatusUpToDate || !byRef[latestSHA].Pinned {
 		t.Fatalf("latest SHA should be current and pinned: %#v", byRef[latestSHA])
 	}
 	if byRef["v3"].Pinned || byRef["main"].Pinned || byRef["0123456789ab"].Pinned {
@@ -75,19 +75,20 @@ func TestCheckGroupsUsesAndComparesResolvedCommits(t *testing.T) {
 			byRef["0123456789ab"],
 		)
 	}
-	if byRef["main"].UpToDate || byRef["main"].UpdateAvailable {
+	if byRef["main"].Status != CheckStatusUnknown {
 		t.Fatalf("unresolved branch should be unknown: %#v", byRef["main"])
 	}
 }
 
 func TestApplyCheckPolicyReportsEachViolation(t *testing.T) {
 	results := []CheckResult{
-		{Action: "actions/checkout", Ref: "v4", UpToDate: true},
-		{Action: "third-party/action", Ref: "main"},
+		{Action: "actions/checkout", Ref: "v4", Status: CheckStatusUpToDate},
+		{Action: "third-party/action", Ref: "main", Status: CheckStatusUnknown},
 		{
 			Action: "actions/setup-go",
 			Ref:    "0123456789012345678901234567890123456789",
 			Pinned: true,
+			Status: CheckStatusUnknown,
 		},
 	}
 
@@ -121,6 +122,7 @@ func TestApplyCheckPolicyReportsEachViolation(t *testing.T) {
 func TestApplyCheckPolicyClearsEarlierViolations(t *testing.T) {
 	results := []CheckResult{{
 		Action:           "owner/action",
+		Status:           CheckStatusUnknown,
 		PolicyViolations: []PolicyViolation{PolicyViolationUnpinned},
 	}}
 
@@ -149,7 +151,7 @@ func TestCheckDoesNotTrustMissingMajorTagName(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if results[0].UpToDate || results[0].UpdateAvailable {
+	if results[0].Status != CheckStatusUnknown {
 		t.Fatalf("missing major tag should be unknown: %#v", results[0])
 	}
 }
@@ -172,7 +174,7 @@ func TestCheckTreatsDifferentPinnedSHAAsUnknown(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !results[0].Pinned || results[0].UpToDate || results[0].UpdateAvailable {
+	if !results[0].Pinned || results[0].Status != CheckStatusUnknown {
 		t.Fatalf("different pinned SHA should be unknown: %#v", results[0])
 	}
 }
@@ -197,7 +199,7 @@ func TestCheckDoesNotCallNewerPrereleaseAnUpdate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if results[0].UpdateAvailable {
+	if results[0].Status != CheckStatusUnknown {
 		t.Fatalf("newer prerelease should not be an update: %#v", results[0])
 	}
 }
@@ -220,8 +222,24 @@ func TestCheckMatchesCommitSHAsCaseInsensitively(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !results[0].UpToDate {
+	if results[0].Status != CheckStatusUpToDate {
 		t.Fatalf("uppercase SHA should be current: %#v", results[0])
+	}
+}
+
+func TestIsCommitSHA(t *testing.T) {
+	for _, test := range []struct {
+		ref  string
+		want bool
+	}{
+		{ref: "abcdefabcdefabcdefabcdefabcdefabcdefabcd", want: true},
+		{ref: "ABCDEFABCDEFABCDEFABCDEFABCDEFABCDEFABCD", want: true},
+		{ref: "abcdef", want: false},
+		{ref: "gggggggggggggggggggggggggggggggggggggggg", want: false},
+	} {
+		if got := IsCommitSHA(test.ref); got != test.want {
+			t.Errorf("IsCommitSHA(%q) = %t, want %t", test.ref, got, test.want)
+		}
 	}
 }
 
@@ -256,7 +274,7 @@ func TestCheckTreatsRepositoriesWithoutVersionsAsUnknown(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(results) != 1 || results[0].Latest.Tag != nil || results[0].UpdateAvailable {
+	if len(results) != 1 || results[0].Latest.Tag != nil || results[0].Status != CheckStatusUnknown {
 		t.Fatalf("unexpected result: %#v", results)
 	}
 }
