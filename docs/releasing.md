@@ -23,7 +23,7 @@ jj tag set v0.1.0 -r main
 jj git push --remote origin --tag v0.1.0
 ```
 
-The release workflow tests the tagged commit, builds each platform binary, injects the tag into `gh actionkit --version`, creates attestations, and publishes the GitHub release.
+The release workflow first checks that the tagged commit belongs to `main` and refuses the release if it does not. It then tests the commit, builds each platform binary, injects the tag into `gh actionkit --version`, creates attestations, and publishes the GitHub release.
 
 ## Local version
 
