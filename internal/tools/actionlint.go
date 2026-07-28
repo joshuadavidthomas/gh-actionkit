@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"context"
 	"io"
 
 	"github.com/joshuadavidthomas/gh-actionkit/internal/workflow"
@@ -16,7 +17,11 @@ type ValidationResult struct {
 
 type Actionlint struct{}
 
-func (Actionlint) Validate(repository string, outputJSON bool, stdout, stderr io.Writer) (ValidationResult, error) {
+func (Actionlint) Validate(ctx context.Context, repository string, outputJSON bool, stdout, stderr io.Writer) (ValidationResult, error) {
+	if err := ctx.Err(); err != nil {
+		return ValidationResult{}, err
+	}
+
 	files, err := workflow.FindFiles(repository)
 	if err != nil || len(files) == 0 {
 		return ValidationResult{}, err
@@ -40,9 +45,24 @@ func (Actionlint) Validate(repository string, outputJSON bool, stdout, stderr io
 	if err != nil {
 		return ValidationResult{}, err
 	}
-	findings, err := linter.LintFiles(files, project)
-	if err != nil {
-		return ValidationResult{}, err
+	type lintResult struct {
+		findings []*actionlint.Error
+		err      error
 	}
-	return ValidationResult{Files: len(files), Findings: len(findings)}, nil
+	result := make(chan lintResult, 1)
+	go func() {
+		findings, err := linter.LintFiles(files, project)
+		result <- lintResult{findings: findings, err: err}
+	}()
+
+	select {
+	case <-ctx.Done():
+		// actionlint has no cancellation API, so the in-flight lint must finish in the background.
+		return ValidationResult{}, ctx.Err()
+	case lint := <-result:
+		if lint.err != nil {
+			return ValidationResult{}, lint.err
+		}
+		return ValidationResult{Files: len(files), Findings: len(lint.findings)}, nil
+	}
 }

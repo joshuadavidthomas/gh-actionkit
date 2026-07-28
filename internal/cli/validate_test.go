@@ -2,13 +2,14 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"io"
 	"testing"
 )
 
 func TestValidateReturnsFindingStatus(t *testing.T) {
-	validate := func(_ string, outputJSON bool, _, _ io.Writer) (int, int, error) {
+	validate := func(_ context.Context, _ string, outputJSON bool, _, _ io.Writer) (int, int, error) {
 		if !outputJSON {
 			t.Fatal("expected JSON output")
 		}
@@ -30,8 +31,34 @@ func TestValidateReturnsFindingStatus(t *testing.T) {
 	}
 }
 
+func TestValidatePassesCommandContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	var received context.Context
+	validate := func(ctx context.Context, _ string, _ bool, _, _ io.Writer) (int, int, error) {
+		received = ctx
+		return 0, 0, ctx.Err()
+	}
+	command := commandForTest(
+		newValidateCommandWithValidate(validate),
+		&bytes.Buffer{},
+		&bytes.Buffer{},
+		"-C",
+		t.TempDir(),
+	)
+
+	err := command.ExecuteContext(ctx)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context cancellation, got %v", err)
+	}
+	if received == nil || !errors.Is(received.Err(), context.Canceled) {
+		t.Fatalf("validate received uncanceled context: %v", received)
+	}
+}
+
 func TestValidateReportsNoWorkflowsWithoutPollutingJSON(t *testing.T) {
-	validate := func(_ string, _ bool, _, _ io.Writer) (int, int, error) {
+	validate := func(_ context.Context, _ string, _ bool, _, _ io.Writer) (int, int, error) {
 		return 0, 0, nil
 	}
 	var stdout bytes.Buffer

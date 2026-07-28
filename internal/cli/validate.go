@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"io"
 
@@ -8,14 +9,14 @@ import (
 	"github.com/spf13/cobra"
 )
 
-type workflowValidate func(string, bool, io.Writer, io.Writer) (files int, findings int, err error)
+type workflowValidate func(context.Context, string, bool, io.Writer, io.Writer) (files int, findings int, err error)
 
 func newValidateCommand() *cobra.Command {
 	return newValidateCommandWithValidate(validateWorkflows)
 }
 
-func validateWorkflows(repository string, outputJSON bool, stdout, stderr io.Writer) (int, int, error) {
-	result, err := (tools.Actionlint{}).Validate(repository, outputJSON, stdout, stderr)
+func validateWorkflows(ctx context.Context, repository string, outputJSON bool, stdout, stderr io.Writer) (int, int, error) {
+	result, err := (tools.Actionlint{}).Validate(ctx, repository, outputJSON, stdout, stderr)
 	return result.Files, result.Findings, err
 }
 
@@ -36,6 +37,7 @@ func newValidateCommandWithValidate(validate workflowValidate) *cobra.Command {
 				return err
 			}
 			files, findings, err := validate(
+				command.Context(),
 				repositoryPath,
 				outputJSON,
 				command.OutOrStdout(),
