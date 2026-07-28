@@ -3,6 +3,7 @@ package actions
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 )
 
@@ -12,6 +13,28 @@ type fakeVersionSource struct {
 	tags         []string
 	refs         map[string]string
 	err          error
+	calls        *resolutionCallCounter
+}
+
+type resolutionCallCounter struct {
+	mutex sync.Mutex
+	calls map[string]int
+}
+
+func newResolutionCallCounter() *resolutionCallCounter {
+	return &resolutionCallCounter{calls: make(map[string]int)}
+}
+
+func (c *resolutionCallCounter) record(tag string) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	c.calls[tag]++
+}
+
+func (c *resolutionCallCounter) count(tag string) int {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	return c.calls[tag]
 }
 
 func (f fakeVersionSource) LatestRelease(context.Context, Repository) (string, bool, error) {
@@ -23,11 +46,35 @@ func (f fakeVersionSource) Tags(context.Context, Repository) ([]string, error) {
 }
 
 func (f fakeVersionSource) ResolveTag(_ context.Context, _ Repository, tag string) (string, bool, error) {
+	if f.calls != nil {
+		f.calls.record(tag)
+	}
 	if f.err != nil {
 		return "", false, f.err
 	}
 	sha, found := f.refs[tag]
 	return sha, found, nil
+}
+
+func TestVersionServiceReusesLatestSHAForMajorTag(t *testing.T) {
+	calls := newResolutionCallCounter()
+	service := NewVersionService(fakeVersionSource{
+		release:      "v4",
+		releaseFound: true,
+		refs:         map[string]string{"v4": "latest-sha"},
+		calls:        calls,
+	})
+
+	info, err := service.Lookup(context.Background(), "actions/checkout")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Major.SHA == nil || info.Latest.SHA == nil || *info.Major.SHA != *info.Latest.SHA {
+		t.Fatalf("expected major and latest to share a SHA: %#v", info)
+	}
+	if got := calls.count("v4"); got != 1 {
+		t.Fatalf("ResolveTag(v4) calls = %d, want 1", got)
+	}
 }
 
 func TestVersionServiceUsesLatestRelease(t *testing.T) {

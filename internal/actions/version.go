@@ -57,9 +57,12 @@ func (s VersionService) Lookup(ctx context.Context, action string) (VersionInfo,
 	if match := majorTagPattern.FindStringSubmatch(latest.Tag); match != nil {
 		majorTag = match[1]
 	}
-	majorSHA, err := s.resolveTag(ctx, repository, majorTag)
-	if err != nil {
-		return VersionInfo{}, fmt.Errorf("resolve tag %s for %s: %w", majorTag, action, err)
+	majorSHA := latest.SHA
+	if majorTag != latest.Tag {
+		majorSHA, err = s.resolveTag(ctx, repository, majorTag)
+		if err != nil {
+			return VersionInfo{}, fmt.Errorf("resolve tag %s for %s: %w", majorTag, action, err)
+		}
 	}
 
 	return VersionInfo{

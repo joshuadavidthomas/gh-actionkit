@@ -218,12 +218,19 @@ func (s CheckService) newResult(
 		result.Used.SHA = stringPointer(use.Ref)
 	} else {
 		result.Used.Tag = stringPointer(use.Ref)
-		sha, found, err := s.source.ResolveTag(ctx, use.Repository, use.Ref)
-		if err != nil {
-			return nil, fmt.Errorf("resolve used ref %s@%s: %w", use.Action, use.Ref, err)
-		}
-		if found {
-			result.Used.SHA = stringPointer(sha)
+		switch {
+		case version != nil && use.Ref == version.Major.Tag:
+			result.Used.SHA = version.Major.SHA
+		case version != nil && use.Ref == version.Latest.Tag:
+			result.Used.SHA = version.Latest.SHA
+		default:
+			sha, found, err := s.source.ResolveTag(ctx, use.Repository, use.Ref)
+			if err != nil {
+				return nil, fmt.Errorf("resolve used ref %s@%s: %w", use.Action, use.Ref, err)
+			}
+			if found {
+				result.Used.SHA = stringPointer(sha)
+			}
 		}
 	}
 

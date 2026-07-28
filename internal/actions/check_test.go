@@ -80,6 +80,44 @@ func TestCheckGroupsUsesAndComparesResolvedCommits(t *testing.T) {
 	}
 }
 
+func TestCheckReusesLoadedVersionSHAs(t *testing.T) {
+	calls := newResolutionCallCounter()
+	source := fakeVersionSource{
+		release:      "v4.2.2",
+		releaseFound: true,
+		refs: map[string]string{
+			"v4":     "major-sha",
+			"v4.2.2": "latest-sha",
+		},
+		calls: calls,
+	}
+	uses := []ActionUse{
+		{
+			Action:     "owner/action",
+			Repository: Repository{Owner: "owner", Name: "action"},
+			Ref:        "v4",
+		},
+		{
+			Action:     "owner/action",
+			Repository: Repository{Owner: "owner", Name: "action"},
+			Ref:        "v4.2.2",
+		},
+	}
+
+	results, err := NewCheckService(source).Check(context.Background(), uses)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 2 || results[0].Status != CheckStatusUpToDate || results[1].Status != CheckStatusUpToDate {
+		t.Fatalf("unexpected results: %#v", results)
+	}
+	for _, tag := range []string{"v4", "v4.2.2"} {
+		if got := calls.count(tag); got != 1 {
+			t.Fatalf("ResolveTag(%s) calls = %d, want 1", tag, got)
+		}
+	}
+}
+
 func TestApplyCheckPolicyReportsEachViolation(t *testing.T) {
 	results := []CheckResult{
 		{Action: "actions/checkout", Ref: "v4", Status: CheckStatusUpToDate},
