@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"testing"
 )
 
@@ -34,6 +35,78 @@ func TestFindFilesReturnsSortedDirectWorkflowYAMLFiles(t *testing.T) {
 	}
 	if !reflect.DeepEqual(files, want) {
 		t.Fatalf("got files %#v, want %#v", files, want)
+	}
+}
+
+func TestFindFilesSkipsSymlinkedWorkflowEntries(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("creating symlinks requires privileges on Windows")
+	}
+
+	repository := t.TempDir()
+	workflowDirectory := filepath.Join(repository, ".github", "workflows")
+	if err := os.MkdirAll(workflowDirectory, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(workflowDirectory, "a.yml"), []byte(`jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	outside := t.TempDir()
+	target := filepath.Join(outside, "secret.yml")
+	if err := os.WriteFile(target, []byte("secret: data\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, filepath.Join(workflowDirectory, "evil.yml")); err != nil {
+		t.Fatal(err)
+	}
+
+	files, err := FindFiles(repository)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{filepath.Join(workflowDirectory, "a.yml")}
+	if !reflect.DeepEqual(files, want) {
+		t.Fatalf("got files %#v, want %#v", files, want)
+	}
+
+	result, err := ScanRepository(repository)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Files != 1 || len(result.Uses) != 1 || result.Uses[0].Action != "actions/checkout" {
+		t.Fatalf("unexpected scan result: %#v", result)
+	}
+}
+
+func TestFindFilesSkipsSymlinkedWorkflowDirectory(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("creating symlinks requires privileges on Windows")
+	}
+
+	repository := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repository, ".github"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	outside := t.TempDir()
+	if err := os.WriteFile(filepath.Join(outside, "ci.yml"), []byte("name: CI\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(repository, ".github", "workflows")); err != nil {
+		t.Fatal(err)
+	}
+
+	files, err := FindFiles(repository)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 0 {
+		t.Fatalf("got files %#v, want none", files)
 	}
 }
 

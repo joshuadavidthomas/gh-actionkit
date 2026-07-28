@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -34,16 +35,24 @@ func ScanRepository(repository string) (ScanResult, error) {
 
 func FindFiles(repository string) ([]string, error) {
 	directory := filepath.Join(repository, ".github", "workflows")
-	entries, err := os.ReadDir(directory)
+	info, err := os.Lstat(directory)
 	if os.IsNotExist(err) {
 		return []string{}, nil
 	}
 	if err != nil {
 		return nil, err
 	}
+	if info.Mode()&fs.ModeSymlink != 0 {
+		return []string{}, nil
+	}
+
+	entries, err := os.ReadDir(directory)
+	if err != nil {
+		return nil, err
+	}
 	paths := make([]string, 0, len(entries))
 	for _, entry := range entries {
-		if entry.IsDir() {
+		if entry.IsDir() || entry.Type()&fs.ModeSymlink != 0 {
 			continue
 		}
 		name := entry.Name()
