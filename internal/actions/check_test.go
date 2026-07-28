@@ -2,7 +2,10 @@ package actions
 
 import (
 	"context"
+	"errors"
+	"sync"
 	"testing"
+	"time"
 )
 
 func TestCheckGroupsUsesAndComparesResolvedCommits(t *testing.T) {
@@ -314,5 +317,305 @@ func TestCheckTreatsRepositoriesWithoutVersionsAsUnknown(t *testing.T) {
 	}
 	if len(results) != 1 || results[0].Latest.Tag != nil || results[0].Status != CheckStatusUnknown {
 		t.Fatalf("unexpected result: %#v", results)
+	}
+}
+
+type workerPoolVersionSource struct {
+	mutex          sync.Mutex
+	calls          map[workerPoolCall]int
+	gates          map[Repository]chan struct{}
+	startedSignals map[Repository]chan struct{}
+	errorWaits     map[Repository]<-chan struct{}
+	errors         map[Repository]error
+	noVersions     map[Repository]bool
+	started        chan Repository
+	errorReturned  chan Repository
+}
+
+type workerPoolCall struct {
+	repository Repository
+	method     string
+}
+
+func newWorkerPoolVersionSource() *workerPoolVersionSource {
+	return &workerPoolVersionSource{
+		calls:          make(map[workerPoolCall]int),
+		gates:          make(map[Repository]chan struct{}),
+		startedSignals: make(map[Repository]chan struct{}),
+		errorWaits:     make(map[Repository]<-chan struct{}),
+		errors:         make(map[Repository]error),
+		noVersions:     make(map[Repository]bool),
+		started:        make(chan Repository, 10),
+		errorReturned:  make(chan Repository, 10),
+	}
+}
+
+func (s *workerPoolVersionSource) LatestRelease(
+	ctx context.Context,
+	repository Repository,
+) (string, bool, error) {
+	s.record(repository, "LatestRelease")
+	if gate, blocked := s.gates[repository]; blocked {
+		select {
+		case s.started <- repository:
+		case <-ctx.Done():
+			return "", false, ctx.Err()
+		}
+		if signal, found := s.startedSignals[repository]; found {
+			close(signal)
+		}
+		select {
+		case <-gate:
+		case <-ctx.Done():
+			return "", false, ctx.Err()
+		}
+	}
+	if err := s.errors[repository]; err != nil {
+		if wait, found := s.errorWaits[repository]; found {
+			select {
+			case <-wait:
+			case <-ctx.Done():
+				return "", false, ctx.Err()
+			}
+		}
+		select {
+		case s.errorReturned <- repository:
+		default:
+		}
+		return "", false, err
+	}
+	if s.noVersions[repository] {
+		return "", false, nil
+	}
+	return "v1.0.0", true, nil
+}
+
+func (s *workerPoolVersionSource) Tags(ctx context.Context, repository Repository) ([]string, error) {
+	s.record(repository, "Tags")
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return nil, nil
+}
+
+func (s *workerPoolVersionSource) ResolveTag(
+	ctx context.Context,
+	repository Repository,
+	tag string,
+) (string, bool, error) {
+	s.record(repository, "ResolveTag")
+	if err := ctx.Err(); err != nil {
+		return "", false, err
+	}
+	return repository.Owner + "/" + repository.Name + "@" + tag, true, nil
+}
+
+func (s *workerPoolVersionSource) record(repository Repository, method string) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	s.calls[workerPoolCall{repository: repository, method: method}]++
+}
+
+func (s *workerPoolVersionSource) callCount(repository Repository, method string) int {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	return s.calls[workerPoolCall{repository: repository, method: method}]
+}
+
+type checkOutcome struct {
+	results []CheckResult
+	err     error
+}
+
+func startCheck(ctx context.Context, service CheckService, uses []ActionUse) <-chan checkOutcome {
+	done := make(chan checkOutcome, 1)
+	go func() {
+		results, err := service.Check(ctx, uses)
+		done <- checkOutcome{results: results, err: err}
+	}()
+	return done
+}
+
+func waitForLookupStarts(
+	t *testing.T,
+	ctx context.Context,
+	source *workerPoolVersionSource,
+	count int,
+) {
+	t.Helper()
+	started := make(map[Repository]bool, count)
+	for range count {
+		select {
+		case repository := <-source.started:
+			if started[repository] {
+				t.Fatalf("lookup for %v started more than once", repository)
+			}
+			started[repository] = true
+		case <-ctx.Done():
+			t.Fatalf("only %d of %d blocked lookups started: %v", len(started), count, ctx.Err())
+		}
+	}
+}
+
+func waitForCheck(t *testing.T, ctx context.Context, done <-chan checkOutcome) checkOutcome {
+	t.Helper()
+	select {
+	case outcome := <-done:
+		return outcome
+	case <-ctx.Done():
+		t.Fatalf("Check did not return: %v", ctx.Err())
+		return checkOutcome{}
+	}
+}
+
+func TestCheckServiceLoadVersionsRunsRepositoriesConcurrently(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	repositories := []Repository{
+		{Owner: "owner", Name: "alpha"},
+		{Owner: "owner", Name: "bravo"},
+		{Owner: "owner", Name: "charlie"},
+	}
+	source := newWorkerPoolVersionSource()
+	for _, repository := range repositories {
+		source.gates[repository] = make(chan struct{})
+	}
+	uses := []ActionUse{
+		{Action: "owner/alpha", Repository: repositories[0], Ref: "v1", Location: Location{Line: 1}},
+		{Action: "owner/alpha", Repository: repositories[0], Ref: "v1", Location: Location{Line: 2}},
+		{Action: "owner/bravo", Repository: repositories[1], Ref: "v1"},
+		{Action: "owner/charlie", Repository: repositories[2], Ref: "v1"},
+	}
+	service := NewCheckService(source)
+	service.workers = 3
+	done := startCheck(ctx, service, uses)
+
+	waitForLookupStarts(t, ctx, source, len(repositories))
+	for _, repository := range repositories {
+		close(source.gates[repository])
+	}
+	outcome := waitForCheck(t, ctx, done)
+	if outcome.err != nil {
+		t.Fatal(outcome.err)
+	}
+	if len(outcome.results) != len(repositories) {
+		t.Fatalf("got %d results, want %d: %#v", len(outcome.results), len(repositories), outcome.results)
+	}
+	for _, repository := range repositories {
+		if got := source.callCount(repository, "LatestRelease"); got != 1 {
+			t.Fatalf("LatestRelease(%v) calls = %d, want 1", repository, got)
+		}
+	}
+	for _, result := range outcome.results {
+		if result.Status != CheckStatusUpToDate {
+			t.Fatalf("unexpected result: %#v", result)
+		}
+	}
+}
+
+func TestCheckServiceLoadVersionsCancelsAfterFirstError(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	blocked := Repository{Owner: "owner", Name: "blocked"}
+	failed := Repository{Owner: "owner", Name: "failed"}
+	wantErr := errors.New("lookup failed")
+	source := newWorkerPoolVersionSource()
+	source.gates[blocked] = make(chan struct{})
+	blockedStarted := make(chan struct{})
+	source.startedSignals[blocked] = blockedStarted
+	source.errorWaits[failed] = blockedStarted
+	source.errors[failed] = wantErr
+	uses := []ActionUse{
+		{Action: "owner/blocked", Repository: blocked, Ref: "v1"},
+		{Action: "owner/failed", Repository: failed, Ref: "v1"},
+		{Action: "owner/other-one", Repository: Repository{Owner: "owner", Name: "other-one"}, Ref: "v1"},
+		{Action: "owner/other-two", Repository: Repository{Owner: "owner", Name: "other-two"}, Ref: "v1"},
+	}
+	service := NewCheckService(source)
+	service.workers = 2
+	done := startCheck(ctx, service, uses)
+
+	select {
+	case repository := <-source.errorReturned:
+		if repository != failed {
+			t.Fatalf("error came from %v, want %v", repository, failed)
+		}
+	case <-ctx.Done():
+		t.Fatalf("injected error was not returned: %v", ctx.Err())
+	}
+	close(source.gates[blocked])
+	outcome := waitForCheck(t, ctx, done)
+	if !errors.Is(outcome.err, wantErr) {
+		t.Fatalf("Check error = %v, want %v", outcome.err, wantErr)
+	}
+}
+
+func TestCheckServiceLoadVersionsKeepsOtherResultsWhenRepositoryHasNoVersions(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	missing := Repository{Owner: "owner", Name: "missing"}
+	source := newWorkerPoolVersionSource()
+	source.noVersions[missing] = true
+	uses := []ActionUse{
+		{Action: "owner/alpha", Repository: Repository{Owner: "owner", Name: "alpha"}, Ref: "v1"},
+		{Action: "owner/missing", Repository: missing, Ref: "main"},
+		{Action: "owner/bravo", Repository: Repository{Owner: "owner", Name: "bravo"}, Ref: "v1"},
+	}
+	service := NewCheckService(source)
+	service.workers = 3
+
+	outcome := waitForCheck(t, ctx, startCheck(ctx, service, uses))
+	if outcome.err != nil {
+		t.Fatal(outcome.err)
+	}
+	if len(outcome.results) != len(uses) {
+		t.Fatalf("got %d results, want %d: %#v", len(outcome.results), len(uses), outcome.results)
+	}
+	for _, result := range outcome.results {
+		if result.Action == "owner/missing" {
+			if result.Status != CheckStatusUnknown || result.Latest.Tag != nil {
+				t.Fatalf("unexpected no-versions result: %#v", result)
+			}
+			continue
+		}
+		if result.Status != CheckStatusUpToDate {
+			t.Fatalf("unexpected result: %#v", result)
+		}
+	}
+}
+
+func TestCheckServiceLoadVersionsReturnsCallerCancellation(t *testing.T) {
+	deadline, cancelDeadline := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancelDeadline()
+	ctx, cancel := context.WithCancel(deadline)
+	defer cancel()
+
+	repositories := []Repository{
+		{Owner: "owner", Name: "alpha"},
+		{Owner: "owner", Name: "bravo"},
+		{Owner: "owner", Name: "charlie"},
+	}
+	source := newWorkerPoolVersionSource()
+	uses := make([]ActionUse, 0, len(repositories))
+	for _, repository := range repositories {
+		source.gates[repository] = make(chan struct{})
+		uses = append(uses, ActionUse{
+			Action:     repository.Owner + "/" + repository.Name,
+			Repository: repository,
+			Ref:        "v1",
+		})
+	}
+	service := NewCheckService(source)
+	service.workers = 3
+	done := startCheck(ctx, service, uses)
+
+	waitForLookupStarts(t, deadline, source, len(repositories))
+	cancel()
+	outcome := waitForCheck(t, deadline, done)
+	if !errors.Is(outcome.err, context.Canceled) {
+		t.Fatalf("Check error = %v, want context cancellation", outcome.err)
 	}
 }
