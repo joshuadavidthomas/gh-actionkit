@@ -77,32 +77,38 @@ func scanFile(repository, path string) ([]actions.ActionUse, error) {
 		return []actions.ActionUse{}, nil
 	}
 	root := document.Content[0]
-	jobs := mappingValue(root, "jobs")
+	jobs := resolveAlias(mappingValue(root, "jobs"))
 	if jobs == nil || jobs.Kind != yaml.MappingNode {
 		return []actions.ActionUse{}, nil
 	}
 
 	var uses []actions.ActionUse
 	addUse := func(node *yaml.Node) {
+		if node == nil {
+			return
+		}
+		line := node.Line
+		node = resolveAlias(node)
 		if node == nil || node.Kind != yaml.ScalarNode {
 			return
 		}
-		if use, ok := parseUse(node.Value, filepath.ToSlash(relativePath), node.Line); ok {
+		if use, ok := parseUse(node.Value, filepath.ToSlash(relativePath), line); ok {
 			uses = append(uses, use)
 		}
 	}
 	for index := 1; index < len(jobs.Content); index += 2 {
-		job := jobs.Content[index]
-		if job.Kind != yaml.MappingNode {
+		job := resolveAlias(jobs.Content[index])
+		if job == nil || job.Kind != yaml.MappingNode {
 			continue
 		}
 		addUse(mappingValue(job, "uses"))
-		steps := mappingValue(job, "steps")
+		steps := resolveAlias(mappingValue(job, "steps"))
 		if steps == nil || steps.Kind != yaml.SequenceNode {
 			continue
 		}
 		for _, step := range steps.Content {
-			if step.Kind == yaml.MappingNode {
+			step = resolveAlias(step)
+			if step != nil && step.Kind == yaml.MappingNode {
 				addUse(mappingValue(step, "uses"))
 			}
 		}
@@ -110,7 +116,20 @@ func scanFile(repository, path string) ([]actions.ActionUse, error) {
 	return uses, nil
 }
 
+func resolveAlias(node *yaml.Node) *yaml.Node {
+	seen := make(map[*yaml.Node]struct{})
+	for node != nil && node.Kind == yaml.AliasNode && node.Alias != nil {
+		if _, found := seen[node]; found {
+			return nil
+		}
+		seen[node] = struct{}{}
+		node = node.Alias
+	}
+	return node
+}
+
 func mappingValue(mapping *yaml.Node, key string) *yaml.Node {
+	mapping = resolveAlias(mapping)
 	if mapping == nil || mapping.Kind != yaml.MappingNode {
 		return nil
 	}

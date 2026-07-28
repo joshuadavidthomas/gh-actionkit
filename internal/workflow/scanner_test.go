@@ -85,6 +85,111 @@ jobs:
 	}
 }
 
+func TestScanRepositoryResolvesUsesAliases(t *testing.T) {
+	repository := t.TempDir()
+	workflowDirectory := filepath.Join(repository, ".github", "workflows")
+	if err := os.MkdirAll(workflowDirectory, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	content := `name: Aliases
+on: push
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    env:
+      ACTION: &action actions/checkout@v4
+      WORKFLOW: &workflow owner/workflows/.github/workflows/reuse.yml@v2
+      BAD: &bad
+        nested: owner/ignored@v1
+    steps: &shared
+      - uses: owner/shared@v1
+  direct:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: *action
+      - uses: *bad
+  shared:
+    runs-on: ubuntu-latest
+    steps: *shared
+  reusable:
+    uses: *workflow
+`
+	if err := os.WriteFile(filepath.Join(workflowDirectory, "aliases.yml"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := ScanRepository(repository)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Files != 1 || len(result.Uses) != 4 {
+		t.Fatalf("unexpected result: %#v", result)
+	}
+	want := []struct {
+		action string
+		ref    string
+		line   int
+	}{
+		{action: "owner/shared", ref: "v1", line: 12},
+		{action: "actions/checkout", ref: "v4", line: 16},
+		// An aliased sequence reuses the anchor's child nodes and their locations.
+		{action: "owner/shared", ref: "v1", line: 12},
+		{action: "owner/workflows/.github/workflows/reuse.yml", ref: "v2", line: 22},
+	}
+	for index, expected := range want {
+		use := result.Uses[index]
+		if use.Action != expected.action || use.Ref != expected.ref || use.Location.File != ".github/workflows/aliases.yml" || use.Location.Line != expected.line {
+			t.Errorf("use %d = %#v, want action %q, ref %q, file %q, line %d", index, use, expected.action, expected.ref, ".github/workflows/aliases.yml", expected.line)
+		}
+	}
+}
+
+func TestScanRepositoryResolvesAliasedJobsAndSteps(t *testing.T) {
+	repository := t.TempDir()
+	workflowDirectory := filepath.Join(repository, ".github", "workflows")
+	if err := os.MkdirAll(workflowDirectory, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	content := `jobs:
+  source: &job
+    uses: owner/workflows/.github/workflows/reuse.yml@v1
+  copied: *job
+  runner:
+    runs-on: ubuntu-latest
+    steps:
+      - &step
+        uses: owner/action@v2
+      - *step
+`
+	if err := os.WriteFile(filepath.Join(workflowDirectory, "aliased-structures.yml"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := ScanRepository(repository)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Files != 1 || len(result.Uses) != 4 {
+		t.Fatalf("unexpected result: %#v", result)
+	}
+	want := []struct {
+		action string
+		ref    string
+		line   int
+	}{
+		{action: "owner/workflows/.github/workflows/reuse.yml", ref: "v1", line: 3},
+		{action: "owner/workflows/.github/workflows/reuse.yml", ref: "v1", line: 3},
+		{action: "owner/action", ref: "v2", line: 9},
+		{action: "owner/action", ref: "v2", line: 9},
+	}
+	for index, expected := range want {
+		use := result.Uses[index]
+		if use.Action != expected.action || use.Ref != expected.ref || use.Location.Line != expected.line {
+			t.Errorf("use %d = %#v, want action %q, ref %q, line %d", index, use, expected.action, expected.ref, expected.line)
+		}
+	}
+}
+
 func TestScanRepositoryReportsMalformedYAML(t *testing.T) {
 	repository := t.TempDir()
 	workflowDirectory := filepath.Join(repository, ".github", "workflows")
