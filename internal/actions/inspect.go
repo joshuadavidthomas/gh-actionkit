@@ -7,7 +7,7 @@ import (
 	"sort"
 	"time"
 
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v3"
 )
 
 var ErrNoActionManifest = errors.New("root action.yml or action.yaml not found")

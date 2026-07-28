@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/joshuadavidthomas/gh-actionkit/internal/actions"
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v3"
 )
 
 type ScanResult struct {
