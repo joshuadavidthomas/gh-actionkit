@@ -34,8 +34,20 @@ func ScanRepository(repository string) (ScanResult, error) {
 }
 
 func FindFiles(repository string) ([]string, error) {
-	directory := filepath.Join(repository, ".github", "workflows")
-	info, err := os.Lstat(directory)
+	githubDirectory := filepath.Join(repository, ".github")
+	info, err := os.Lstat(githubDirectory)
+	if os.IsNotExist(err) {
+		return []string{}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if info.Mode()&fs.ModeSymlink != 0 {
+		return []string{}, nil
+	}
+
+	directory := filepath.Join(githubDirectory, "workflows")
+	info, err = os.Lstat(directory)
 	if os.IsNotExist(err) {
 		return []string{}, nil
 	}

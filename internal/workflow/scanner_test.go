@@ -110,6 +110,33 @@ func TestFindFilesSkipsSymlinkedWorkflowDirectory(t *testing.T) {
 	}
 }
 
+func TestFindFilesSkipsSymlinkedGitHubDirectory(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("creating symlinks requires privileges on Windows")
+	}
+
+	repository := t.TempDir()
+	outside := t.TempDir()
+	workflowDirectory := filepath.Join(outside, "workflows")
+	if err := os.MkdirAll(workflowDirectory, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(workflowDirectory, "ci.yml"), []byte("name: CI\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(repository, ".github")); err != nil {
+		t.Fatal(err)
+	}
+
+	files, err := FindFiles(repository)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 0 {
+		t.Fatalf("got files %#v, want none", files)
+	}
+}
+
 func TestScanRepositoryFindsStructuredRemoteUses(t *testing.T) {
 	repository := t.TempDir()
 	workflowDirectory := filepath.Join(repository, ".github", "workflows")
