@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0]
+
 ### Added
 
 - Accept `OWNER/REPO[/PATH...]` in `inspect` and `version`. `inspect` reads the named Action manifest, while `version` preserves the path in its output and snippets.
@@ -79,8 +81,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `version`, `search`, `check`, `lint`, and `validate` commands.
 - Added precompiled GitHub CLI extension releases for Linux, macOS, and Windows.
 
-[Unreleased]: https://github.com/joshuadavidthomas/gh-actionkit/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/joshuadavidthomas/gh-actionkit/compare/v0.5.0...HEAD
 [0.1.0]: https://github.com/joshuadavidthomas/gh-actionkit/releases/tag/v0.1.0
 [0.2.0]: https://github.com/joshuadavidthomas/gh-actionkit/releases/tag/v0.2.0
 [0.3.0]: https://github.com/joshuadavidthomas/gh-actionkit/releases/tag/v0.3.0
 [0.4.0]: https://github.com/joshuadavidthomas/gh-actionkit/releases/tag/v0.4.0
+[0.5.0]: https://github.com/joshuadavidthomas/gh-actionkit/releases/tag/v0.5.0
