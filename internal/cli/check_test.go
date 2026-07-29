@@ -368,7 +368,7 @@ func realCheckWithSource(source actions.VersionSource) actionCheck {
 		if len(scan.Uses) == 0 {
 			return report, nil
 		}
-		report.Results, err = actions.NewCheckService(source).Check(ctx, scan.Uses)
+		report.Results, err = actions.Check(ctx, source, scan.Uses)
 		return report, err
 	}
 }

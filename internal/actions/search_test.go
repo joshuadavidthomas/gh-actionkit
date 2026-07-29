@@ -25,7 +25,7 @@ func TestSearchRequestsVerifiedCandidates(t *testing.T) {
 		{Action: "owner/popular", Stars: 200},
 	}}
 
-	results, err := NewSearchService(source).Search(context.Background(), "build", 1)
+	results, err := Search(context.Background(), source, "build", 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,14 +42,14 @@ func TestSearchReportsSourceErrors(t *testing.T) {
 	sourceErr := errors.New("rate limited")
 	source := &fakeSearchSource{err: sourceErr}
 
-	_, err := NewSearchService(source).Search(context.Background(), "build", 10)
+	_, err := Search(context.Background(), source, "build", 10)
 	if !errors.Is(err, sourceErr) {
 		t.Fatalf("expected source error, got %v", err)
 	}
 }
 
 func TestSearchRejectsInvalidLimit(t *testing.T) {
-	_, err := NewSearchService(&fakeSearchSource{}).Search(context.Background(), "build", 0)
+	_, err := Search(context.Background(), &fakeSearchSource{}, "build", 0)
 	if err == nil {
 		t.Fatal("expected an error")
 	}

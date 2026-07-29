@@ -4,12 +4,11 @@ import (
 	"bytes"
 	"strings"
 	"testing"
-	"time"
 )
 
 func TestSpinnerWritesAndClearsTransientStatus(t *testing.T) {
 	var output bytes.Buffer
-	indicator := newSpinner(&output, "Searching GitHub...", true, time.Hour)
+	indicator := newSpinner(&output, "Searching GitHub...", true)
 	indicator.Stop()
 
 	got := output.String()
@@ -23,7 +22,7 @@ func TestSpinnerWritesAndClearsTransientStatus(t *testing.T) {
 
 func TestDisabledSpinnerWritesNothing(t *testing.T) {
 	var output bytes.Buffer
-	indicator := newSpinner(&output, "Searching GitHub...", false, time.Hour)
+	indicator := newSpinner(&output, "Searching GitHub...", false)
 	indicator.Stop()
 
 	if output.Len() != 0 {

@@ -19,10 +19,10 @@ type spinner struct {
 
 func startCommandSpinner(stdout, stderr io.Writer, outputJSON bool, label string) *spinner {
 	enabled := !outputJSON && outputIsTerminal(stdout) && outputIsTerminal(stderr)
-	return newSpinner(stderr, label, enabled, spinnerInterval)
+	return newSpinner(stderr, label, enabled)
 }
 
-func newSpinner(output io.Writer, label string, enabled bool, interval time.Duration) *spinner {
+func newSpinner(output io.Writer, label string, enabled bool) *spinner {
 	indicator := &spinner{output: output, label: label}
 	if !enabled {
 		return indicator
@@ -31,13 +31,13 @@ func newSpinner(output io.Writer, label string, enabled bool, interval time.Dura
 	indicator.stop = make(chan struct{})
 	indicator.done = make(chan struct{})
 	indicator.render(spinnerFrames[0])
-	go indicator.animate(interval)
+	go indicator.animate()
 	return indicator
 }
 
-func (s *spinner) animate(interval time.Duration) {
+func (s *spinner) animate() {
 	defer close(s.done)
-	ticker := time.NewTicker(interval)
+	ticker := time.NewTicker(spinnerInterval)
 	defer ticker.Stop()
 
 	frame := 1

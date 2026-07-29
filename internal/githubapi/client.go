@@ -130,7 +130,9 @@ func (c *Client) SearchRepositories(
 		}
 
 		for _, repository := range response.Search.Nodes {
-			if !repository.hasActionManifest() {
+			hasActionManifest := (repository.ActionYML != nil && repository.ActionYML.TypeName == "Blob") ||
+				(repository.ActionYAML != nil && repository.ActionYAML.TypeName == "Blob")
+			if !hasActionManifest {
 				continue
 			}
 			results = append(results, actions.SearchResult{
@@ -172,14 +174,6 @@ type searchRepository struct {
 
 type graphQLObject struct {
 	TypeName string `json:"__typename"`
-}
-
-func (repository searchRepository) hasActionManifest() bool {
-	return isBlob(repository.ActionYML) || isBlob(repository.ActionYAML)
-}
-
-func isBlob(object *graphQLObject) bool {
-	return object != nil && object.TypeName == "Blob"
 }
 
 func (c *Client) ResolveTag(ctx context.Context, repository actions.Repository, tag string) (string, bool, error) {

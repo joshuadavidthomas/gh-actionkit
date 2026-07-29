@@ -24,15 +24,7 @@ type SearchSource interface {
 	SearchRepositories(context.Context, SearchOptions) ([]SearchResult, error)
 }
 
-type SearchService struct {
-	source SearchSource
-}
-
-func NewSearchService(source SearchSource) SearchService {
-	return SearchService{source: source}
-}
-
-func (s SearchService) Search(ctx context.Context, query string, limit int) ([]SearchResult, error) {
+func Search(ctx context.Context, source SearchSource, query string, limit int) ([]SearchResult, error) {
 	if query == "" {
 		return nil, fmt.Errorf("search query cannot be empty")
 	}
@@ -40,7 +32,7 @@ func (s SearchService) Search(ctx context.Context, query string, limit int) ([]S
 		return nil, fmt.Errorf("limit must be between 1 and %d", searchCandidates)
 	}
 
-	results, err := s.source.SearchRepositories(ctx, SearchOptions{
+	results, err := source.SearchRepositories(ctx, SearchOptions{
 		Query:          query,
 		ResultLimit:    limit,
 		CandidateLimit: searchCandidates,

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 
 	"github.com/joshuadavidthomas/gh-actionkit/internal/actions"
 	"github.com/joshuadavidthomas/gh-actionkit/internal/githubapi"
@@ -33,7 +32,7 @@ func checkActions(ctx context.Context, repository string) (checkReport, error) {
 	if err != nil {
 		return checkReport{}, fmt.Errorf("connect to GitHub: %w", err)
 	}
-	report.Results, err = actions.NewCheckService(client).Check(ctx, scan.Uses)
+	report.Results, err = actions.Check(ctx, client, scan.Uses)
 	return report, err
 }
 
@@ -74,7 +73,13 @@ func newCheckCommand(check actionCheck) *cobra.Command {
 				FailOnUnknown: failOnUnknown,
 				AllowedOwners: allowedOwners,
 			})
-			emptyMessage := checkEmptyMessage(report)
+			var emptyMessage string
+			switch {
+			case report.WorkflowFiles == 0:
+				emptyMessage = "No workflow files found in .github/workflows"
+			case report.Uses == 0:
+				emptyMessage = "No remote action uses found in workflow files"
+			}
 			if outputJSON {
 				encoder := json.NewEncoder(command.OutOrStdout())
 				encoder.SetIndent("", "  ")
@@ -90,8 +95,11 @@ func newCheckCommand(check actionCheck) *cobra.Command {
 				if _, err := fmt.Fprintln(command.OutOrStdout(), emptyMessage); err != nil {
 					return err
 				}
-			} else if err := writeCheckResults(command.OutOrStdout(), report.Results); err != nil {
-				return err
+			} else {
+				output := command.OutOrStdout()
+				if _, err := fmt.Fprintln(output, renderCheckResults(report.Results, outputWidth(output), outputUsesColor(output))); err != nil {
+					return err
+				}
 			}
 			for _, result := range report.Results {
 				if result.Status == actions.CheckStatusUpdateAvailable || len(result.PolicyViolations) > 0 {
@@ -107,20 +115,4 @@ func newCheckCommand(check actionCheck) *cobra.Command {
 	command.Flags().BoolVar(&failOnUnknown, "fail-on-unknown", false, "fail when an Action ref cannot be classified")
 	command.Flags().StringSliceVar(&allowedOwners, "allow-owner", nil, "allow remote Actions from this owner (repeatable)")
 	return command
-}
-
-func checkEmptyMessage(report checkReport) string {
-	switch {
-	case report.WorkflowFiles == 0:
-		return "No workflow files found in .github/workflows"
-	case report.Uses == 0:
-		return "No remote action uses found in workflow files"
-	default:
-		return ""
-	}
-}
-
-func writeCheckResults(output io.Writer, results []actions.CheckResult) error {
-	_, err := fmt.Fprintln(output, renderCheckResults(results, outputWidth(output), outputUsesColor(output)))
-	return err
 }

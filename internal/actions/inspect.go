@@ -4,7 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sort"
+	"maps"
+	"slices"
 	"time"
 
 	"go.yaml.in/yaml/v3"
@@ -78,31 +79,25 @@ type InspectSource interface {
 	InspectAction(context.Context, ActionIdentifier, string) (RepositoryInspection, error)
 }
 
-type InspectService struct {
-	source InspectSource
-}
-
-func NewInspectService(source InspectSource) InspectService {
-	return InspectService{source: source}
-}
-
-func (s InspectService) Inspect(ctx context.Context, identifier ActionIdentifier) (InspectResult, error) {
+func Inspect(ctx context.Context, source InspectSource, identifier ActionIdentifier) (InspectResult, error) {
 	manifestRef := "HEAD"
 	var latest *Version
-	resolved, err := NewVersionService(s.source).Latest(ctx, identifier.Repository())
+	var pinnedSHA *string
+	resolved, err := LatestVersion(ctx, source, identifier.Repository())
 	switch {
 	case err == nil:
 		latest = &resolved
 		manifestRef = resolved.Tag
-		if resolved.SHA != nil && IsCommitSHA(*resolved.SHA) {
-			manifestRef = *resolved.SHA
+		pinnedSHA = resolved.PinnedSHA()
+		if pinnedSHA != nil {
+			manifestRef = *pinnedSHA
 		}
 	case errors.Is(err, ErrNoVersions):
 	case err != nil:
 		return InspectResult{}, err
 	}
 
-	inspection, err := s.source.InspectAction(ctx, identifier, manifestRef)
+	inspection, err := source.InspectAction(ctx, identifier, manifestRef)
 	if err != nil {
 		return InspectResult{}, fmt.Errorf("inspect action %s: %w", identifier, err)
 	}
@@ -130,8 +125,8 @@ func (s InspectService) Inspect(ctx context.Context, identifier ActionIdentifier
 		Manifest:   manifest,
 		Latest:     latest,
 	}
-	if latest != nil && latest.SHA != nil && IsCommitSHA(*latest.SHA) {
-		pinnedUses := fmt.Sprintf("uses: %s@%s # %s", canonicalIdentifier, *latest.SHA, latest.Tag)
+	if pinnedSHA != nil {
+		pinnedUses := fmt.Sprintf("uses: %s@%s # %s", canonicalIdentifier, *pinnedSHA, latest.Tag)
 		result.PinnedUses = &pinnedUses
 	}
 	return result, nil
@@ -175,7 +170,7 @@ func parseActionManifest(file ManifestFile, action string) (ActionManifest, erro
 		Inputs:      make([]ManifestInput, 0, len(document.Inputs)),
 		Outputs:     make([]ManifestOutput, 0, len(document.Outputs)),
 	}
-	inputNames := sortedKeys(document.Inputs)
+	inputNames := slices.Sorted(maps.Keys(document.Inputs))
 	for _, name := range inputNames {
 		input := document.Inputs[name]
 		defaultValue, err := manifestScalar(input.Default)
@@ -189,7 +184,7 @@ func parseActionManifest(file ManifestFile, action string) (ActionManifest, erro
 			Default:     defaultValue,
 		})
 	}
-	outputNames := sortedKeys(document.Outputs)
+	outputNames := slices.Sorted(maps.Keys(document.Outputs))
 	for _, name := range outputNames {
 		output := document.Outputs[name]
 		manifest.Outputs = append(manifest.Outputs, ManifestOutput{
@@ -199,15 +194,6 @@ func parseActionManifest(file ManifestFile, action string) (ActionManifest, erro
 		})
 	}
 	return manifest, nil
-}
-
-func sortedKeys[T any](values map[string]T) []string {
-	keys := make([]string, 0, len(values))
-	for key := range values {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	return keys
 }
 
 func manifestScalar(node yaml.Node) (*string, error) {

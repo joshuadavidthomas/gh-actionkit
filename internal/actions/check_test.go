@@ -48,7 +48,7 @@ func TestCheckGroupsUsesAndComparesResolvedCommits(t *testing.T) {
 		},
 	}
 
-	results, err := NewCheckService(source).Check(context.Background(), uses)
+	results, err := Check(context.Background(), source, uses)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,7 +100,7 @@ func TestCheckReusesLoadedVersionSHAs(t *testing.T) {
 		},
 	}
 
-	results, err := NewCheckService(source).Check(context.Background(), uses)
+	results, err := Check(context.Background(), source, uses)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -180,7 +180,7 @@ func TestCheckDoesNotTrustMissingMajorTagName(t *testing.T) {
 		Ref:        "v4",
 	}}
 
-	results, err := NewCheckService(source).Check(context.Background(), uses)
+	results, err := Check(context.Background(), source, uses)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -202,7 +202,7 @@ func TestCheckTreatsDifferentPinnedSHAAsUnknown(t *testing.T) {
 		Ref:        usedSHA,
 	}}
 
-	results, err := NewCheckService(source).Check(context.Background(), uses)
+	results, err := Check(context.Background(), source, uses)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -226,7 +226,7 @@ func TestCheckDoesNotCallNewerPrereleaseAnUpdate(t *testing.T) {
 		Ref:        "v5.0.0-beta.1",
 	}}
 
-	results, err := NewCheckService(source).Check(context.Background(), uses)
+	results, err := Check(context.Background(), source, uses)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -248,28 +248,12 @@ func TestCheckMatchesCommitSHAsCaseInsensitively(t *testing.T) {
 		Ref:        upperSHA,
 	}}
 
-	results, err := NewCheckService(source).Check(context.Background(), uses)
+	results, err := Check(context.Background(), source, uses)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if results[0].Status != CheckStatusUpToDate {
 		t.Fatalf("uppercase SHA should be current: %#v", results[0])
-	}
-}
-
-func TestIsCommitSHA(t *testing.T) {
-	for _, test := range []struct {
-		ref  string
-		want bool
-	}{
-		{ref: "abcdefabcdefabcdefabcdefabcdefabcdefabcd", want: true},
-		{ref: "ABCDEFABCDEFABCDEFABCDEFABCDEFABCDEFABCD", want: true},
-		{ref: "abcdef", want: false},
-		{ref: "gggggggggggggggggggggggggggggggggggggggg", want: false},
-	} {
-		if got := IsCommitSHA(test.ref); got != test.want {
-			t.Errorf("IsCommitSHA(%q) = %t, want %t", test.ref, got, test.want)
-		}
 	}
 }
 
@@ -279,7 +263,7 @@ func TestCheckTreatsRepositoriesWithoutVersionsAsUnknown(t *testing.T) {
 		Ref:        "main",
 	}}
 
-	results, err := NewCheckService(fakeVersionSource{}).Check(context.Background(), uses)
+	results, err := Check(context.Background(), fakeVersionSource{}, uses)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -392,7 +376,7 @@ func TestCheckKeepsSubpathsSeparateAndLoadsTheirRepositoryOnce(t *testing.T) {
 		{Identifier: mustParseIdentifier(t, "owner/action/two"), Ref: "v1"},
 	}
 
-	results, err := NewCheckService(source).Check(context.Background(), uses)
+	results, err := Check(context.Background(), source, uses)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -413,7 +397,7 @@ func TestCheckContinuesWhenOneRepositoryHasNoVersions(t *testing.T) {
 		{Identifier: mustParseIdentifier(t, "owner/versioned"), Ref: "v1"},
 	}
 
-	results, err := NewCheckService(source).Check(context.Background(), uses)
+	results, err := Check(context.Background(), source, uses)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -428,10 +412,10 @@ type checkOutcome struct {
 	err     error
 }
 
-func startCheck(ctx context.Context, service CheckService, uses []ActionUse) <-chan checkOutcome {
+func startCheck(ctx context.Context, source VersionSource, uses []ActionUse) <-chan checkOutcome {
 	done := make(chan checkOutcome, 1)
 	go func() {
-		results, err := service.Check(ctx, uses)
+		results, err := Check(ctx, source, uses)
 		done <- checkOutcome{results: results, err: err}
 	}()
 	return done
@@ -496,7 +480,7 @@ func TestCheckLimitsConcurrentRepositoryLookups(t *testing.T) {
 		})
 	}
 	uses = append(uses, uses[0])
-	done := startCheck(ctx, NewCheckService(source), uses)
+	done := startCheck(ctx, source, uses)
 
 	waitForLookupStarts(t, ctx, source, 10)
 	select {
@@ -538,7 +522,7 @@ func TestCheckCancelsLookupsAfterOperationalError(t *testing.T) {
 		{Identifier: mustParseIdentifier(t, "owner/blocked"), Ref: "v1"},
 		{Identifier: mustParseIdentifier(t, "owner/failed"), Ref: "v1"},
 	}
-	outcome := waitForCheck(t, ctx, startCheck(ctx, NewCheckService(source), uses))
+	outcome := waitForCheck(t, ctx, startCheck(ctx, source, uses))
 	if !errors.Is(outcome.err, wantErr) {
 		t.Fatalf("Check error = %v, want %v", outcome.err, wantErr)
 	}
@@ -564,7 +548,7 @@ func TestCheckReturnsCallerCancellation(t *testing.T) {
 			Ref:        "v1",
 		})
 	}
-	done := startCheck(ctx, NewCheckService(source), uses)
+	done := startCheck(ctx, source, uses)
 
 	waitForLookupStarts(t, deadline, source, len(repositories))
 	cancel()

@@ -24,7 +24,7 @@ func lookupVersion(ctx context.Context, repository actions.Repository) (actions.
 	if err != nil {
 		return actions.RepositoryVersions{}, fmt.Errorf("connect to GitHub: %w", err)
 	}
-	return actions.NewVersionService(client).Lookup(ctx, repository)
+	return actions.LookupVersions(ctx, client, repository)
 }
 
 func newVersionCommand(lookup versionLookup) *cobra.Command {
@@ -77,14 +77,15 @@ func newVersionCommand(lookup versionLookup) *cobra.Command {
 }
 
 func writeVersionSnippet(output io.Writer, info versionOutput) error {
-	if info.Latest.SHA == nil || !actions.IsCommitSHA(*info.Latest.SHA) {
+	sha := info.Latest.PinnedSHA()
+	if sha == nil {
 		return fmt.Errorf(
 			"cannot write snippet for %s: tag %s does not resolve to a full commit SHA",
 			info.Action,
 			info.Latest.Tag,
 		)
 	}
-	_, err := fmt.Fprintf(output, "uses: %s@%s # %s\n", info.Action, *info.Latest.SHA, info.Latest.Tag)
+	_, err := fmt.Fprintf(output, "uses: %s@%s # %s\n", info.Action, *sha, info.Latest.Tag)
 	return err
 }
 
