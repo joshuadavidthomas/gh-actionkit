@@ -4,15 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"regexp"
 	"sort"
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
 	"golang.org/x/sync/errgroup"
 )
-
-var commitSHAPattern = regexp.MustCompile(`^[0-9a-fA-F]{40}$`)
 
 type Location struct {
 	File string `json:"file"`
@@ -64,15 +61,7 @@ type CheckPolicy struct {
 	AllowedOwners []string
 }
 
-type CheckService struct {
-	source VersionSource
-}
-
-func NewCheckService(source VersionSource) CheckService {
-	return CheckService{source: source}
-}
-
-func (s CheckService) Check(ctx context.Context, uses []ActionUse) ([]CheckResult, error) {
+func Check(ctx context.Context, source VersionSource, uses []ActionUse) ([]CheckResult, error) {
 	if len(uses) == 0 {
 		return []CheckResult{}, nil
 	}
@@ -81,7 +70,7 @@ func (s CheckService) Check(ctx context.Context, uses []ActionUse) ([]CheckResul
 	for _, use := range uses {
 		repositories[use.Identifier.Repository()] = struct{}{}
 	}
-	versions, err := s.loadVersions(ctx, repositories)
+	versions, err := loadVersions(ctx, source, repositories)
 	if err != nil {
 		return nil, err
 	}
@@ -95,7 +84,7 @@ func (s CheckService) Check(ctx context.Context, uses []ActionUse) ([]CheckResul
 		key := groupKey{identifier: use.Identifier, ref: use.Ref}
 		group, found := groups[key]
 		if !found {
-			group, err = s.newResult(ctx, use, versions[use.Identifier.Repository()])
+			group, err = newCheckResult(ctx, source, use, versions[use.Identifier.Repository()])
 			if err != nil {
 				return nil, err
 			}
@@ -141,8 +130,9 @@ func ApplyCheckPolicy(results []CheckResult, policy CheckPolicy) {
 	}
 }
 
-func (s CheckService) loadVersions(
+func loadVersions(
 	ctx context.Context,
+	source VersionSource,
 	repositories map[Repository]struct{},
 ) (map[Repository]*RepositoryVersions, error) {
 	repositoryList := make([]Repository, 0, len(repositories))
@@ -153,13 +143,12 @@ func (s CheckService) loadVersions(
 
 	group, groupCtx := errgroup.WithContext(ctx)
 	group.SetLimit(10)
-	service := NewVersionService(s.source)
 	for index, repository := range repositoryList {
 		group.Go(func() error {
 			if err := groupCtx.Err(); err != nil {
 				return err
 			}
-			version, err := service.Lookup(groupCtx, repository)
+			version, err := LookupVersions(groupCtx, source, repository)
 			switch {
 			case err == nil:
 				loaded[index] = &version
@@ -185,67 +174,68 @@ func (s CheckService) loadVersions(
 	return versions, nil
 }
 
-func (s CheckService) newResult(
+func newCheckResult(
 	ctx context.Context,
+	source VersionSource,
 	use ActionUse,
 	version *RepositoryVersions,
 ) (*CheckResult, error) {
 	result := &CheckResult{
 		Action: use.Identifier.String(),
 		Ref:    use.Ref,
-		Pinned: IsCommitSHA(use.Ref),
-		Status: CheckStatusUnknown,
+		Pinned: commitSHAPattern.MatchString(use.Ref),
 	}
 	if result.Pinned {
-		result.Used.SHA = stringPointer(use.Ref)
+		result.Used.SHA = &use.Ref
 	} else {
-		result.Used.Tag = stringPointer(use.Ref)
+		result.Used.Tag = &use.Ref
 		switch {
 		case version != nil && use.Ref == version.Major.Tag:
 			result.Used.SHA = version.Major.SHA
 		case version != nil && use.Ref == version.Latest.Tag:
 			result.Used.SHA = version.Latest.SHA
 		default:
-			sha, found, err := s.source.ResolveTag(ctx, use.Identifier.Repository(), use.Ref)
+			sha, found, err := source.ResolveTag(ctx, use.Identifier.Repository(), use.Ref)
 			if err != nil {
 				return nil, fmt.Errorf("resolve used ref %s@%s: %w", use.Identifier, use.Ref, err)
 			}
 			if found {
-				result.Used.SHA = stringPointer(sha)
+				result.Used.SHA = &sha
 			}
 		}
 	}
 
-	if version == nil {
-		return result, nil
+	if version != nil {
+		majorTag := version.Major.Tag
+		latestTag := version.Latest.Tag
+		result.Major = CheckVersion{Tag: &majorTag, SHA: version.Major.SHA}
+		result.Latest = CheckVersion{Tag: &latestTag, SHA: version.Latest.SHA}
 	}
-	result.Major = CheckVersion{Tag: stringPointer(version.Major.Tag), SHA: version.Major.SHA}
-	result.Latest = CheckVersion{Tag: stringPointer(version.Latest.Tag), SHA: version.Latest.SHA}
-	if shaMatches(result.Used.SHA, version.Major.SHA) || shaMatches(result.Used.SHA, version.Latest.SHA) {
-		result.Status = CheckStatusUpToDate
-	} else if hasNewerStableVersion(use.Ref, result.Used.SHA, version.Latest) {
-		result.Status = CheckStatusUpdateAvailable
-	}
+	result.Status = classifyCheckStatus(use.Ref, result.Pinned, result.Used.SHA, version)
 	return result, nil
 }
 
-func IsCommitSHA(ref string) bool {
-	return commitSHAPattern.MatchString(ref)
-}
-
-func stringPointer(value string) *string {
-	return &value
-}
-
-func shaMatches(left, right *string) bool {
-	return left != nil && right != nil && strings.EqualFold(*left, *right)
-}
-
-func hasNewerStableVersion(usedRef string, usedSHA *string, latest Version) bool {
-	if usedSHA == nil || latest.SHA == nil || IsCommitSHA(usedRef) {
-		return false
+func classifyCheckStatus(
+	usedRef string,
+	pinned bool,
+	usedSHA *string,
+	versions *RepositoryVersions,
+) CheckStatus {
+	if versions == nil {
+		return CheckStatusUnknown
+	}
+	if usedSHA != nil &&
+		((versions.Major.SHA != nil && strings.EqualFold(*usedSHA, *versions.Major.SHA)) ||
+			(versions.Latest.SHA != nil && strings.EqualFold(*usedSHA, *versions.Latest.SHA))) {
+		return CheckStatusUpToDate
+	}
+	if usedSHA == nil || versions.Latest.SHA == nil || pinned {
+		return CheckStatusUnknown
 	}
 	usedVersion, usedErr := semver.NewVersion(usedRef)
-	latestVersion, latestErr := semver.NewVersion(latest.Tag)
-	return usedErr == nil && latestErr == nil && usedVersion.LessThan(latestVersion)
+	latestVersion, latestErr := semver.NewVersion(versions.Latest.Tag)
+	if usedErr == nil && latestErr == nil && usedVersion.LessThan(latestVersion) {
+		return CheckStatusUpdateAvailable
+	}
+	return CheckStatusUnknown
 }

@@ -36,7 +36,7 @@ func inspectForTest(
 	value string,
 ) (InspectResult, error) {
 	t.Helper()
-	return NewInspectService(source).Inspect(context.Background(), mustParseIdentifier(t, value))
+	return Inspect(context.Background(), source, mustParseIdentifier(t, value))
 }
 
 func TestInspectReturnsRepositoryManifestAndPinnedVersion(t *testing.T) {

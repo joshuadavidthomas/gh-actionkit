@@ -20,7 +20,7 @@ func inspectAction(ctx context.Context, identifier actions.ActionIdentifier) (ac
 	if err != nil {
 		return actions.InspectResult{}, fmt.Errorf("connect to GitHub: %w", err)
 	}
-	return actions.NewInspectService(client).Inspect(ctx, identifier)
+	return actions.Inspect(ctx, client, identifier)
 }
 
 func newInspectCommand(inspect actionInspect) *cobra.Command {
@@ -72,7 +72,11 @@ func writeInspection(output io.Writer, result actions.InspectResult) error {
 	if _, err := fmt.Fprintf(output, "  %s\n", sectionStyle.Render("repository")); err != nil {
 		return err
 	}
-	if err := writeInspectionField(output, styles, "owner", sanitizeTerminalLine(formatOwner(result.Repository.Owner))); err != nil {
+	owner := result.Repository.Owner.Login
+	if result.Repository.Owner.Type != "" {
+		owner += " (" + result.Repository.Owner.Type + ")"
+	}
+	if err := writeInspectionField(output, styles, "owner", sanitizeTerminalLine(owner)); err != nil {
 		return err
 	}
 	if err := writeInspectionField(output, styles, "archived", fmt.Sprint(result.Repository.Archived)); err != nil {
@@ -199,11 +203,4 @@ func writeInspectionField(output io.Writer, styles outputStyles, label, value st
 
 func indentInspectionText(value, indentation string) string {
 	return strings.ReplaceAll(strings.TrimSpace(sanitizeTerminal(value)), "\n", "\n"+indentation)
-}
-
-func formatOwner(owner actions.RepositoryOwner) string {
-	if owner.Type == "" {
-		return owner.Login
-	}
-	return owner.Login + " (" + owner.Type + ")"
 }

@@ -75,7 +75,7 @@ func outputUsesColor(output io.Writer) bool {
 }
 
 func outputWidth(output io.Writer) int {
-	file, ok := outputFile(output)
+	file, ok := output.(interface{ Fd() uintptr })
 	if !ok || !term.IsTerminal(int(file.Fd())) {
 		return 0
 	}
@@ -87,11 +87,6 @@ func outputWidth(output io.Writer) int {
 }
 
 func outputIsTerminal(output io.Writer) bool {
-	file, ok := outputFile(output)
-	return ok && term.IsTerminal(int(file.Fd()))
-}
-
-func outputFile(output io.Writer) (interface{ Fd() uintptr }, bool) {
 	file, ok := output.(interface{ Fd() uintptr })
-	return file, ok
+	return ok && term.IsTerminal(int(file.Fd()))
 }

@@ -18,7 +18,7 @@ func searchActions(ctx context.Context, query string, limit int) ([]actions.Sear
 	if err != nil {
 		return nil, fmt.Errorf("connect to GitHub: %w", err)
 	}
-	return actions.NewSearchService(client).Search(ctx, query, limit)
+	return actions.Search(ctx, client, query, limit)
 }
 
 func newSearchCommand(search actionSearch) *cobra.Command {
@@ -66,7 +66,11 @@ func writeSearchResults(output io.Writer, results []actions.SearchResult) error 
 	actionStyle := styles.action.Bold(true)
 
 	for _, result := range results {
-		details := styles.secondary.Render(fmt.Sprintf("(⭐ %s)", formatStars(result.Stars)))
+		stars := fmt.Sprint(result.Stars)
+		if result.Stars >= 1000 {
+			stars = fmt.Sprintf("%.1fk", float64(result.Stars)/1000)
+		}
+		details := styles.secondary.Render(fmt.Sprintf("(⭐ %s)", stars))
 		if _, err := fmt.Fprintf(output, "%s %s\n", actionStyle.Render(sanitizeTerminalLine(result.Action)), details); err != nil {
 			return err
 		}
@@ -80,11 +84,4 @@ func writeSearchResults(output io.Writer, results []actions.SearchResult) error 
 		}
 	}
 	return nil
-}
-
-func formatStars(stars int) string {
-	if stars >= 1000 {
-		return fmt.Sprintf("%.1fk", float64(stars)/1000)
-	}
-	return fmt.Sprint(stars)
 }

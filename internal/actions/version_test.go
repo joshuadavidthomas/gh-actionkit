@@ -56,17 +56,18 @@ func (f fakeVersionSource) ResolveTag(_ context.Context, _ Repository, tag strin
 	return sha, found, nil
 }
 
-func TestVersionServiceReusesLatestSHAForMajorTag(t *testing.T) {
+func TestLookupVersionsReusesLatestSHAForMajorTag(t *testing.T) {
 	calls := newResolutionCallCounter()
-	service := NewVersionService(fakeVersionSource{
+	source := fakeVersionSource{
 		release:      "v4",
 		releaseFound: true,
 		refs:         map[string]string{"v4": "latest-sha"},
 		calls:        calls,
-	})
+	}
 
-	info, err := service.Lookup(
+	info, err := LookupVersions(
 		context.Background(),
+		source,
 		Repository{Owner: "actions", Name: "checkout"},
 	)
 	if err != nil {
@@ -80,18 +81,19 @@ func TestVersionServiceReusesLatestSHAForMajorTag(t *testing.T) {
 	}
 }
 
-func TestVersionServiceUsesLatestRelease(t *testing.T) {
-	service := NewVersionService(fakeVersionSource{
+func TestLookupVersionsUsesLatestRelease(t *testing.T) {
+	source := fakeVersionSource{
 		release:      "v4.2.2",
 		releaseFound: true,
 		refs: map[string]string{
 			"v4":     "major-sha",
 			"v4.2.2": "latest-sha",
 		},
-	})
+	}
 
-	info, err := service.Lookup(
+	info, err := LookupVersions(
 		context.Background(),
+		source,
 		Repository{Owner: "actions", Name: "checkout"},
 	)
 	if err != nil {
@@ -122,11 +124,12 @@ func (s *recordingVersionSource) ResolveTag(_ context.Context, _ Repository, tag
 	return "0123456789abcdef0123456789abcdef01234567", true, nil
 }
 
-func TestVersionServiceLatestDoesNotResolveMajorTag(t *testing.T) {
+func TestLatestVersionDoesNotResolveMajorTag(t *testing.T) {
 	source := &recordingVersionSource{}
 
-	version, err := NewVersionService(source).Latest(
+	version, err := LatestVersion(
 		context.Background(),
+		source,
 		Repository{Owner: "actions", Name: "checkout"},
 	)
 	if err != nil {
@@ -137,14 +140,15 @@ func TestVersionServiceLatestDoesNotResolveMajorTag(t *testing.T) {
 	}
 }
 
-func TestVersionServiceFallsBackToHighestStableTag(t *testing.T) {
-	service := NewVersionService(fakeVersionSource{
+func TestLookupVersionsFallsBackToHighestStableTag(t *testing.T) {
+	source := fakeVersionSource{
 		tags: []string{"v3.0.0-beta.1", "v1.9.0", "v2.1.0", "v2"},
 		refs: map[string]string{"v2.1.0": "latest-sha"},
-	})
+	}
 
-	info, err := service.Lookup(
+	info, err := LookupVersions(
 		context.Background(),
+		source,
 		Repository{Owner: "owner", Name: "action"},
 	)
 	if err != nil {
@@ -158,25 +162,26 @@ func TestVersionServiceFallsBackToHighestStableTag(t *testing.T) {
 	}
 }
 
-func TestVersionServiceRejectsPrereleaseOnlyTags(t *testing.T) {
-	service := NewVersionService(fakeVersionSource{
+func TestLookupVersionsRejectsPrereleaseOnlyTags(t *testing.T) {
+	source := fakeVersionSource{
 		tags: []string{"v3.0.0-beta.1", "v2.0.0-rc.1"},
-	})
+	}
 
-	_, err := service.Lookup(context.Background(), Repository{Owner: "owner", Name: "action"})
+	_, err := LookupVersions(context.Background(), source, Repository{Owner: "owner", Name: "action"})
 	if err == nil {
 		t.Fatal("expected an error")
 	}
 }
 
-func TestVersionServiceFallsBackToNonSemanticTag(t *testing.T) {
-	service := NewVersionService(fakeVersionSource{
+func TestLookupVersionsFallsBackToNonSemanticTag(t *testing.T) {
+	source := fakeVersionSource{
 		tags: []string{"release-current"},
 		refs: map[string]string{"release-current": "commit-sha"},
-	})
+	}
 
-	info, err := service.Lookup(
+	info, err := LookupVersions(
 		context.Background(),
+		source,
 		Repository{Owner: "owner", Name: "action"},
 	)
 	if err != nil {
@@ -187,11 +192,11 @@ func TestVersionServiceFallsBackToNonSemanticTag(t *testing.T) {
 	}
 }
 
-func TestVersionServiceReportsSourceErrors(t *testing.T) {
+func TestLookupVersionsReportsSourceErrors(t *testing.T) {
 	sourceErr := errors.New("rate limited")
-	service := NewVersionService(fakeVersionSource{err: sourceErr})
-	_, err := service.Lookup(
+	_, err := LookupVersions(
 		context.Background(),
+		fakeVersionSource{err: sourceErr},
 		Repository{Owner: "actions", Name: "checkout"},
 	)
 	if !errors.Is(err, sourceErr) {

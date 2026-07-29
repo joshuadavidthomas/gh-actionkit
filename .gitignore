@@ -12,6 +12,5 @@
 go.work
 
 .env
-/.agents/plans/
 /dist/
 /gh-actionkit

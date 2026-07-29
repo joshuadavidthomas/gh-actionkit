@@ -10,6 +10,7 @@ import (
 )
 
 var majorTagPattern = regexp.MustCompile(`^(v?\d+)`)
+var commitSHAPattern = regexp.MustCompile(`^[0-9a-fA-F]{40}$`)
 var ErrNoVersions = errors.New("no releases or tags found")
 
 type Repository struct {
@@ -20,6 +21,13 @@ type Repository struct {
 type Version struct {
 	Tag string  `json:"tag"`
 	SHA *string `json:"sha"`
+}
+
+func (v Version) PinnedSHA() *string {
+	if v.SHA == nil || !commitSHAPattern.MatchString(*v.SHA) {
+		return nil
+	}
+	return v.SHA
 }
 
 type RepositoryVersions struct {
@@ -33,16 +41,8 @@ type VersionSource interface {
 	ResolveTag(context.Context, Repository, string) (sha string, found bool, err error)
 }
 
-type VersionService struct {
-	source VersionSource
-}
-
-func NewVersionService(source VersionSource) VersionService {
-	return VersionService{source: source}
-}
-
-func (s VersionService) Lookup(ctx context.Context, repository Repository) (RepositoryVersions, error) {
-	latest, err := s.latest(ctx, repository)
+func LookupVersions(ctx context.Context, source VersionSource, repository Repository) (RepositoryVersions, error) {
+	latest, err := LatestVersion(ctx, source, repository)
 	if err != nil {
 		return RepositoryVersions{}, err
 	}
@@ -53,7 +53,7 @@ func (s VersionService) Lookup(ctx context.Context, repository Repository) (Repo
 	}
 	majorSHA := latest.SHA
 	if majorTag != latest.Tag {
-		majorSHA, err = s.resolveTag(ctx, repository, majorTag)
+		majorSHA, err = resolveTag(ctx, source, repository, majorTag)
 		if err != nil {
 			return RepositoryVersions{}, fmt.Errorf(
 				"resolve tag %s for %s/%s: %w",
@@ -71,18 +71,14 @@ func (s VersionService) Lookup(ctx context.Context, repository Repository) (Repo
 	}, nil
 }
 
-func (s VersionService) Latest(ctx context.Context, repository Repository) (Version, error) {
-	return s.latest(ctx, repository)
-}
-
-func (s VersionService) latest(ctx context.Context, repository Repository) (Version, error) {
+func LatestVersion(ctx context.Context, source VersionSource, repository Repository) (Version, error) {
 	name := repository.Owner + "/" + repository.Name
-	latestTag, found, err := s.source.LatestRelease(ctx, repository)
+	latestTag, found, err := source.LatestRelease(ctx, repository)
 	if err != nil {
 		return Version{}, fmt.Errorf("find latest release for %s: %w", name, err)
 	}
 	if !found {
-		tags, tagsErr := s.source.Tags(ctx, repository)
+		tags, tagsErr := source.Tags(ctx, repository)
 		if tagsErr != nil {
 			return Version{}, fmt.Errorf("list tags for %s: %w", name, tagsErr)
 		}
@@ -92,15 +88,15 @@ func (s VersionService) latest(ctx context.Context, repository Repository) (Vers
 		return Version{}, fmt.Errorf("%w for %s", ErrNoVersions, name)
 	}
 
-	latestSHA, err := s.resolveTag(ctx, repository, latestTag)
+	latestSHA, err := resolveTag(ctx, source, repository, latestTag)
 	if err != nil {
 		return Version{}, fmt.Errorf("resolve tag %s for %s: %w", latestTag, name, err)
 	}
 	return Version{Tag: latestTag, SHA: latestSHA}, nil
 }
 
-func (s VersionService) resolveTag(ctx context.Context, repository Repository, tag string) (*string, error) {
-	sha, found, err := s.source.ResolveTag(ctx, repository, tag)
+func resolveTag(ctx context.Context, source VersionSource, repository Repository, tag string) (*string, error) {
+	sha, found, err := source.ResolveTag(ctx, repository, tag)
 	if err != nil || !found {
 		return nil, err
 	}

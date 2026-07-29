@@ -118,31 +118,28 @@ func (c *Client) InspectAction(
 			SPDXID: source.LicenseInfo.SPDXID,
 		}
 	}
-	manifest, found, err := inspectManifestFile(actionYML, source.ActionYML)
+	inspection.Manifest, err = inspectManifestFile(actionYML, source.ActionYML)
 	if err != nil {
 		return actions.RepositoryInspection{}, err
 	}
-	if !found {
-		manifest, found, err = inspectManifestFile(actionYAML, source.ActionYAML)
+	if inspection.Manifest == nil {
+		inspection.Manifest, err = inspectManifestFile(actionYAML, source.ActionYAML)
 		if err != nil {
 			return actions.RepositoryInspection{}, err
 		}
 	}
-	if found {
-		inspection.Manifest = manifest
-	}
 	return inspection, nil
 }
 
-func inspectManifestFile(path string, blob *inspectBlob) (*actions.ManifestFile, bool, error) {
+func inspectManifestFile(path string, blob *inspectBlob) (*actions.ManifestFile, error) {
 	if blob == nil || blob.TypeName != "Blob" {
-		return nil, false, nil
+		return nil, nil
 	}
 	if blob.IsTruncated {
-		return nil, false, fmt.Errorf("%s content is truncated", path)
+		return nil, fmt.Errorf("%s content is truncated", path)
 	}
 	if blob.Text == nil {
-		return nil, false, fmt.Errorf("%s content is unavailable", path)
+		return nil, fmt.Errorf("%s content is unavailable", path)
 	}
-	return &actions.ManifestFile{Path: path, Content: *blob.Text}, true, nil
+	return &actions.ManifestFile{Path: path, Content: *blob.Text}, nil
 }
