@@ -7,9 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Accept `OWNER/REPO[/PATH...]` in `inspect` and `version`. `inspect` reads the named Action manifest, while `version` preserves the path in its output and snippets.
+
 ### Changed
 
-- Replace `check --json` fields `up_to_date` and `update_available` with `status`.
+- Replace `check --json` fields `up_to_date` and `update_available` with `status`: `up_to_date`, `update_available`, or `unknown`.
+- Reuse resolved tag SHAs in version lookups and checks to avoid duplicate GitHub API requests.
+- Require gh-actionkit v0.5.0 or newer for the bundled agent skill and document subdirectory Actions.
+- Refuse to publish releases for tags whose commits are not on `main`.
+
+### Fixed
+
+- Resolve YAML aliases when scanning job- and step-level `uses` references.
+- Ignore symlinked `.github` directories, workflow directories, and workflow files during discovery.
+- Sanitize terminal control characters in human-readable `search` and `inspect` output and command errors.
+- Honor cancellation before and after workflow validation.
 
 ## [0.4.0]
 
