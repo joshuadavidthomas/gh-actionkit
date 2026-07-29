@@ -13,10 +13,6 @@ import (
 
 type actionSearch func(context.Context, string, int) ([]actions.SearchResult, error)
 
-func newSearchCommand() *cobra.Command {
-	return newSearchCommandWithSearch(searchActions)
-}
-
 func searchActions(ctx context.Context, query string, limit int) ([]actions.SearchResult, error) {
 	client, err := githubapi.New()
 	if err != nil {
@@ -25,7 +21,7 @@ func searchActions(ctx context.Context, query string, limit int) ([]actions.Sear
 	return actions.NewSearchService(client).Search(ctx, query, limit)
 }
 
-func newSearchCommandWithSearch(search actionSearch) *cobra.Command {
+func newSearchCommand(search actionSearch) *cobra.Command {
 	var limit int
 	var outputJSON bool
 	command := &cobra.Command{
@@ -42,7 +38,6 @@ func newSearchCommandWithSearch(search actionSearch) *cobra.Command {
 				outputJSON,
 				"Searching GitHub and verifying actions...",
 			)
-			defer indicator.Stop()
 			results, err := search(command.Context(), args[0], limit)
 			indicator.Stop()
 			if err != nil {

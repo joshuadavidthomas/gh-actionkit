@@ -13,38 +13,37 @@ import (
 	"github.com/spf13/cobra"
 )
 
-type actionInspect func(context.Context, string) (actions.InspectResult, error)
+type actionInspect func(context.Context, actions.ActionIdentifier) (actions.InspectResult, error)
 
-func newInspectCommand() *cobra.Command {
-	return newInspectCommandWithInspect(inspectAction)
-}
-
-func inspectAction(ctx context.Context, action string) (actions.InspectResult, error) {
+func inspectAction(ctx context.Context, identifier actions.ActionIdentifier) (actions.InspectResult, error) {
 	client, err := githubapi.New()
 	if err != nil {
 		return actions.InspectResult{}, fmt.Errorf("connect to GitHub: %w", err)
 	}
-	return actions.NewInspectService(client).Inspect(ctx, action)
+	return actions.NewInspectService(client).Inspect(ctx, identifier)
 }
 
-func newInspectCommandWithInspect(inspect actionInspect) *cobra.Command {
+func newInspectCommand(inspect actionInspect) *cobra.Command {
 	var outputJSON bool
 	command := &cobra.Command{
-		Use:   "inspect OWNER/REPO",
+		Use:   "inspect OWNER/REPO[/PATH]",
 		Short: "Inspect a GitHub Action",
 		Long:  "Show repository, manifest, input, output, runtime, and stable version details for a GitHub Action.",
 		Example: "  gh actionkit inspect actions/checkout\n" +
-			"  gh actionkit inspect actions/checkout --json",
+			"  gh actionkit inspect github/codeql-action/init --json",
 		Args: cobra.ExactArgs(1),
 		RunE: func(command *cobra.Command, args []string) error {
+			identifier, err := actions.ParseActionIdentifier(args[0])
+			if err != nil {
+				return err
+			}
 			indicator := startCommandSpinner(
 				command.OutOrStdout(),
 				command.ErrOrStderr(),
 				outputJSON,
 				"Inspecting action...",
 			)
-			defer indicator.Stop()
-			result, err := inspect(command.Context(), args[0])
+			result, err := inspect(command.Context(), identifier)
 			indicator.Stop()
 			if err != nil {
 				return err

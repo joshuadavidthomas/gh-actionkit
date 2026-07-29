@@ -12,28 +12,27 @@ import (
 	"github.com/cli/go-gh/v2/pkg/api"
 )
 
-type ErrorKind string
+type errorKind string
 
 const (
-	ErrorAuthentication ErrorKind = "authentication"
-	ErrorRateLimit      ErrorKind = "rate_limit"
-	ErrorResponse       ErrorKind = "response"
+	errorAuthentication errorKind = "authentication"
+	errorRateLimit      errorKind = "rate_limit"
+	errorResponse       errorKind = "response"
 )
 
-type Error struct {
-	Kind       ErrorKind
-	StatusCode int
-	RetryAt    *time.Time
-	cause      error
+type githubError struct {
+	kind    errorKind
+	retryAt *time.Time
+	cause   error
 }
 
-func (e *Error) Error() string {
-	switch e.Kind {
-	case ErrorAuthentication:
+func (e *githubError) Error() string {
+	switch e.kind {
+	case errorAuthentication:
 		return fmt.Sprintf("GitHub authentication failed: %v; run `gh auth status`", e.cause)
-	case ErrorRateLimit:
-		if e.RetryAt != nil {
-			return fmt.Sprintf("GitHub API rate limited until %s", e.RetryAt.Format(time.RFC3339))
+	case errorRateLimit:
+		if e.retryAt != nil {
+			return fmt.Sprintf("GitHub API rate limited until %s", e.retryAt.Format(time.RFC3339))
 		}
 		return "GitHub API rate limited; retry later"
 	default:
@@ -41,12 +40,12 @@ func (e *Error) Error() string {
 	}
 }
 
-func (e *Error) Unwrap() error {
+func (e *githubError) Unwrap() error {
 	return e.cause
 }
 
 func authenticationError(err error) error {
-	return &Error{Kind: ErrorAuthentication, cause: err}
+	return &githubError{kind: errorAuthentication, cause: err}
 }
 
 func normalizeError(err error, now time.Time) error {
@@ -56,32 +55,28 @@ func normalizeError(err error, now time.Time) error {
 
 	var graphQLError *api.GraphQLError
 	if errors.As(err, &graphQLError) {
-		kind := ErrorResponse
+		kind := errorResponse
 		if isGraphQLRateLimit(graphQLError) {
-			kind = ErrorRateLimit
+			kind = errorRateLimit
 		}
-		return &Error{Kind: kind, cause: err}
+		return &githubError{kind: kind, cause: err}
 	}
 
 	var httpError *api.HTTPError
 	if !errors.As(err, &httpError) {
-		return &Error{Kind: ErrorResponse, cause: err}
+		return &githubError{kind: errorResponse, cause: err}
 	}
 
-	kind := ErrorResponse
+	kind := errorResponse
 	switch {
 	case httpError.StatusCode == http.StatusUnauthorized:
-		kind = ErrorAuthentication
+		kind = errorAuthentication
 	case isRateLimitError(httpError):
-		kind = ErrorRateLimit
+		kind = errorRateLimit
 	}
-	githubError := &Error{
-		Kind:       kind,
-		StatusCode: httpError.StatusCode,
-		cause:      err,
-	}
-	if kind == ErrorRateLimit {
-		githubError.RetryAt = retryAt(httpError.Headers, now)
+	githubError := &githubError{kind: kind, cause: err}
+	if kind == errorRateLimit {
+		githubError.retryAt = retryAt(httpError.Headers, now)
 	}
 	return githubError
 }

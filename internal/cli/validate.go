@@ -9,18 +9,9 @@ import (
 	"github.com/spf13/cobra"
 )
 
-type workflowValidate func(context.Context, string, bool, io.Writer, io.Writer) (files int, findings int, err error)
+type workflowValidate func(context.Context, string, bool, io.Writer, io.Writer) (tools.ValidationResult, error)
 
-func newValidateCommand() *cobra.Command {
-	return newValidateCommandWithValidate(validateWorkflows)
-}
-
-func validateWorkflows(ctx context.Context, repository string, outputJSON bool, stdout, stderr io.Writer) (int, int, error) {
-	result, err := (tools.Actionlint{}).Validate(ctx, repository, outputJSON, stdout, stderr)
-	return result.Files, result.Findings, err
-}
-
-func newValidateCommandWithValidate(validate workflowValidate) *cobra.Command {
+func newValidateCommand(validate workflowValidate) *cobra.Command {
 	var repository string
 	var outputJSON bool
 
@@ -36,7 +27,7 @@ func newValidateCommandWithValidate(validate workflowValidate) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			files, findings, err := validate(
+			result, err := validate(
 				command.Context(),
 				repositoryPath,
 				outputJSON,
@@ -46,7 +37,7 @@ func newValidateCommandWithValidate(validate workflowValidate) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("validate workflows: %w", err)
 			}
-			if files == 0 {
+			if result.Files == 0 {
 				output := command.OutOrStdout()
 				if outputJSON {
 					output = command.ErrOrStderr()
@@ -54,8 +45,8 @@ func newValidateCommandWithValidate(validate workflowValidate) *cobra.Command {
 				_, err := fmt.Fprintln(output, "No workflow files found in .github/workflows")
 				return err
 			}
-			if findings > 0 {
-				return StatusError{Code: 1}
+			if result.Findings > 0 {
+				return exitStatusError(1)
 			}
 			return nil
 		},

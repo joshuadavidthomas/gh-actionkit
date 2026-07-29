@@ -22,32 +22,27 @@ func TestCheckGroupsUsesAndComparesResolvedCommits(t *testing.T) {
 	}
 	uses := []ActionUse{
 		{
-			Action:     "owner/action/subpath",
-			Repository: Repository{Owner: "owner", Name: "action"},
+			Identifier: mustParseIdentifier(t, "owner/action/subpath"),
 			Ref:        "v3",
 			Location:   Location{File: ".github/workflows/ci.yml", Line: 10},
 		},
 		{
-			Action:     "owner/action/subpath",
-			Repository: Repository{Owner: "owner", Name: "action"},
+			Identifier: mustParseIdentifier(t, "owner/action/subpath"),
 			Ref:        "v3",
 			Location:   Location{File: ".github/workflows/release.yml", Line: 12},
 		},
 		{
-			Action:     "owner/action/subpath",
-			Repository: Repository{Owner: "owner", Name: "action"},
+			Identifier: mustParseIdentifier(t, "owner/action/subpath"),
 			Ref:        latestSHA,
 			Location:   Location{File: ".github/workflows/ci.yml", Line: 20},
 		},
 		{
-			Action:     "owner/action/subpath",
-			Repository: Repository{Owner: "owner", Name: "action"},
+			Identifier: mustParseIdentifier(t, "owner/action/subpath"),
 			Ref:        "main",
 			Location:   Location{File: ".github/workflows/ci.yml", Line: 30},
 		},
 		{
-			Action:     "owner/action/subpath",
-			Repository: Repository{Owner: "owner", Name: "action"},
+			Identifier: mustParseIdentifier(t, "owner/action/subpath"),
 			Ref:        "0123456789ab",
 			Location:   Location{File: ".github/workflows/ci.yml", Line: 40},
 		},
@@ -96,13 +91,11 @@ func TestCheckReusesLoadedVersionSHAs(t *testing.T) {
 	}
 	uses := []ActionUse{
 		{
-			Action:     "owner/action",
-			Repository: Repository{Owner: "owner", Name: "action"},
+			Identifier: mustParseIdentifier(t, "owner/action"),
 			Ref:        "v4",
 		},
 		{
-			Action:     "owner/action",
-			Repository: Repository{Owner: "owner", Name: "action"},
+			Identifier: mustParseIdentifier(t, "owner/action"),
 			Ref:        "v4.2.2",
 		},
 	}
@@ -133,30 +126,30 @@ func TestApplyCheckPolicyReportsEachViolation(t *testing.T) {
 		},
 	}
 
-	got := ApplyCheckPolicy(results, CheckPolicy{
+	ApplyCheckPolicy(results, CheckPolicy{
 		RequireSHA:    true,
 		FailOnUnknown: true,
 		AllowedOwners: []string{"Actions"},
 	})
 
-	if len(got[0].PolicyViolations) != 1 || got[0].PolicyViolations[0] != PolicyViolationUnpinned {
-		t.Fatalf("unexpected current tag violations: %#v", got[0].PolicyViolations)
+	if len(results[0].PolicyViolations) != 1 || results[0].PolicyViolations[0] != PolicyViolationUnpinned {
+		t.Fatalf("unexpected current tag violations: %#v", results[0].PolicyViolations)
 	}
 	want := []PolicyViolation{
 		PolicyViolationUnpinned,
 		PolicyViolationUnknown,
 		PolicyViolationDisallowedOwner,
 	}
-	if len(got[1].PolicyViolations) != len(want) {
-		t.Fatalf("unexpected unknown violations: %#v", got[1].PolicyViolations)
+	if len(results[1].PolicyViolations) != len(want) {
+		t.Fatalf("unexpected unknown violations: %#v", results[1].PolicyViolations)
 	}
 	for index := range want {
-		if got[1].PolicyViolations[index] != want[index] {
-			t.Fatalf("unexpected unknown violations: %#v", got[1].PolicyViolations)
+		if results[1].PolicyViolations[index] != want[index] {
+			t.Fatalf("unexpected unknown violations: %#v", results[1].PolicyViolations)
 		}
 	}
-	if len(got[2].PolicyViolations) != 1 || got[2].PolicyViolations[0] != PolicyViolationUnknown {
-		t.Fatalf("unexpected pinned unknown violations: %#v", got[2].PolicyViolations)
+	if len(results[2].PolicyViolations) != 1 || results[2].PolicyViolations[0] != PolicyViolationUnknown {
+		t.Fatalf("unexpected pinned unknown violations: %#v", results[2].PolicyViolations)
 	}
 }
 
@@ -167,10 +160,10 @@ func TestApplyCheckPolicyClearsEarlierViolations(t *testing.T) {
 		PolicyViolations: []PolicyViolation{PolicyViolationUnpinned},
 	}}
 
-	got := ApplyCheckPolicy(results, CheckPolicy{})
+	ApplyCheckPolicy(results, CheckPolicy{})
 
-	if len(got[0].PolicyViolations) != 0 {
-		t.Fatalf("unexpected violations: %#v", got[0].PolicyViolations)
+	if len(results[0].PolicyViolations) != 0 {
+		t.Fatalf("unexpected violations: %#v", results[0].PolicyViolations)
 	}
 }
 
@@ -183,8 +176,7 @@ func TestCheckDoesNotTrustMissingMajorTagName(t *testing.T) {
 		},
 	}
 	uses := []ActionUse{{
-		Action:     "owner/action",
-		Repository: Repository{Owner: "owner", Name: "action"},
+		Identifier: mustParseIdentifier(t, "owner/action"),
 		Ref:        "v4",
 	}}
 
@@ -206,8 +198,7 @@ func TestCheckTreatsDifferentPinnedSHAAsUnknown(t *testing.T) {
 		refs:         map[string]string{"v4": latestSHA, "v4.2.2": latestSHA},
 	}
 	uses := []ActionUse{{
-		Action:     "owner/action",
-		Repository: Repository{Owner: "owner", Name: "action"},
+		Identifier: mustParseIdentifier(t, "owner/action"),
 		Ref:        usedSHA,
 	}}
 
@@ -231,8 +222,7 @@ func TestCheckDoesNotCallNewerPrereleaseAnUpdate(t *testing.T) {
 		},
 	}
 	uses := []ActionUse{{
-		Action:     "owner/action",
-		Repository: Repository{Owner: "owner", Name: "action"},
+		Identifier: mustParseIdentifier(t, "owner/action"),
 		Ref:        "v5.0.0-beta.1",
 	}}
 
@@ -254,8 +244,7 @@ func TestCheckMatchesCommitSHAsCaseInsensitively(t *testing.T) {
 		refs:         map[string]string{"v1": lowerSHA, "v1.0.0": lowerSHA},
 	}
 	uses := []ActionUse{{
-		Action:     "owner/action",
-		Repository: Repository{Owner: "owner", Name: "action"},
+		Identifier: mustParseIdentifier(t, "owner/action"),
 		Ref:        upperSHA,
 	}}
 
@@ -284,30 +273,9 @@ func TestIsCommitSHA(t *testing.T) {
 	}
 }
 
-func TestCheckPropagatesCancellation(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	source := fakeVersionSource{
-		release:      "v1.0.0",
-		releaseFound: true,
-		refs:         map[string]string{"v1": "sha", "v1.0.0": "sha"},
-	}
-	uses := []ActionUse{{
-		Action:     "owner/action",
-		Repository: Repository{Owner: "owner", Name: "action"},
-		Ref:        "0123456789012345678901234567890123456789",
-	}}
-
-	_, err := NewCheckService(source).Check(ctx, uses)
-	if err == nil {
-		t.Fatal("expected cancellation error")
-	}
-}
-
 func TestCheckTreatsRepositoriesWithoutVersionsAsUnknown(t *testing.T) {
 	uses := []ActionUse{{
-		Action:     "owner/action",
-		Repository: Repository{Owner: "owner", Name: "action"},
+		Identifier: mustParseIdentifier(t, "owner/action"),
 		Ref:        "main",
 	}}
 
@@ -320,37 +288,35 @@ func TestCheckTreatsRepositoriesWithoutVersionsAsUnknown(t *testing.T) {
 	}
 }
 
-type workerPoolVersionSource struct {
+type controlledVersionSource struct {
 	mutex          sync.Mutex
-	calls          map[workerPoolCall]int
+	calls          map[lookupCall]int
 	gates          map[Repository]chan struct{}
 	startedSignals map[Repository]chan struct{}
 	errorWaits     map[Repository]<-chan struct{}
 	errors         map[Repository]error
-	noVersions     map[Repository]bool
+	missing        map[Repository]bool
 	started        chan Repository
-	errorReturned  chan Repository
 }
 
-type workerPoolCall struct {
+type lookupCall struct {
 	repository Repository
 	method     string
 }
 
-func newWorkerPoolVersionSource() *workerPoolVersionSource {
-	return &workerPoolVersionSource{
-		calls:          make(map[workerPoolCall]int),
+func newControlledVersionSource() *controlledVersionSource {
+	return &controlledVersionSource{
+		calls:          make(map[lookupCall]int),
 		gates:          make(map[Repository]chan struct{}),
 		startedSignals: make(map[Repository]chan struct{}),
 		errorWaits:     make(map[Repository]<-chan struct{}),
 		errors:         make(map[Repository]error),
-		noVersions:     make(map[Repository]bool),
+		missing:        make(map[Repository]bool),
 		started:        make(chan Repository, 10),
-		errorReturned:  make(chan Repository, 10),
 	}
 }
 
-func (s *workerPoolVersionSource) LatestRelease(
+func (s *controlledVersionSource) LatestRelease(
 	ctx context.Context,
 	repository Repository,
 ) (string, bool, error) {
@@ -378,19 +344,15 @@ func (s *workerPoolVersionSource) LatestRelease(
 				return "", false, ctx.Err()
 			}
 		}
-		select {
-		case s.errorReturned <- repository:
-		default:
-		}
 		return "", false, err
 	}
-	if s.noVersions[repository] {
+	if s.missing[repository] {
 		return "", false, nil
 	}
 	return "v1.0.0", true, nil
 }
 
-func (s *workerPoolVersionSource) Tags(ctx context.Context, repository Repository) ([]string, error) {
+func (s *controlledVersionSource) Tags(ctx context.Context, repository Repository) ([]string, error) {
 	s.record(repository, "Tags")
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -398,7 +360,7 @@ func (s *workerPoolVersionSource) Tags(ctx context.Context, repository Repositor
 	return nil, nil
 }
 
-func (s *workerPoolVersionSource) ResolveTag(
+func (s *controlledVersionSource) ResolveTag(
 	ctx context.Context,
 	repository Repository,
 	tag string,
@@ -410,16 +372,55 @@ func (s *workerPoolVersionSource) ResolveTag(
 	return repository.Owner + "/" + repository.Name + "@" + tag, true, nil
 }
 
-func (s *workerPoolVersionSource) record(repository Repository, method string) {
+func (s *controlledVersionSource) record(repository Repository, method string) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
-	s.calls[workerPoolCall{repository: repository, method: method}]++
+	s.calls[lookupCall{repository: repository, method: method}]++
 }
 
-func (s *workerPoolVersionSource) callCount(repository Repository, method string) int {
+func (s *controlledVersionSource) callCount(repository Repository, method string) int {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
-	return s.calls[workerPoolCall{repository: repository, method: method}]
+	return s.calls[lookupCall{repository: repository, method: method}]
+}
+
+func TestCheckKeepsSubpathsSeparateAndLoadsTheirRepositoryOnce(t *testing.T) {
+	repository := Repository{Owner: "owner", Name: "action"}
+	source := newControlledVersionSource()
+	uses := []ActionUse{
+		{Identifier: mustParseIdentifier(t, "owner/action/one"), Ref: "v1"},
+		{Identifier: mustParseIdentifier(t, "owner/action/two"), Ref: "v1"},
+	}
+
+	results, err := NewCheckService(source).Check(context.Background(), uses)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 2 || results[0].Action != "owner/action/one" || results[1].Action != "owner/action/two" {
+		t.Fatalf("unexpected results: %#v", results)
+	}
+	if got := source.callCount(repository, "LatestRelease"); got != 1 {
+		t.Fatalf("LatestRelease calls = %d, want 1", got)
+	}
+}
+
+func TestCheckContinuesWhenOneRepositoryHasNoVersions(t *testing.T) {
+	missing := Repository{Owner: "owner", Name: "missing"}
+	source := newControlledVersionSource()
+	source.missing[missing] = true
+	uses := []ActionUse{
+		{Identifier: mustParseIdentifier(t, "owner/missing"), Ref: "main"},
+		{Identifier: mustParseIdentifier(t, "owner/versioned"), Ref: "v1"},
+	}
+
+	results, err := NewCheckService(source).Check(context.Background(), uses)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 2 || results[0].Action != "owner/missing" || results[0].Status != CheckStatusUnknown ||
+		results[1].Action != "owner/versioned" || results[1].Status != CheckStatusUpToDate {
+		t.Fatalf("unexpected results: %#v", results)
+	}
 }
 
 type checkOutcome struct {
@@ -439,7 +440,7 @@ func startCheck(ctx context.Context, service CheckService, uses []ActionUse) <-c
 func waitForLookupStarts(
 	t *testing.T,
 	ctx context.Context,
-	source *workerPoolVersionSource,
+	source *controlledVersionSource,
 	count int,
 ) {
 	t.Helper()
@@ -468,7 +469,7 @@ func waitForCheck(t *testing.T, ctx context.Context, done <-chan checkOutcome) c
 	}
 }
 
-func TestCheckServiceLoadVersionsRunsRepositoriesConcurrently(t *testing.T) {
+func TestCheckLimitsConcurrentRepositoryLookups(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -476,22 +477,33 @@ func TestCheckServiceLoadVersionsRunsRepositoriesConcurrently(t *testing.T) {
 		{Owner: "owner", Name: "alpha"},
 		{Owner: "owner", Name: "bravo"},
 		{Owner: "owner", Name: "charlie"},
+		{Owner: "owner", Name: "delta"},
+		{Owner: "owner", Name: "echo"},
+		{Owner: "owner", Name: "foxtrot"},
+		{Owner: "owner", Name: "golf"},
+		{Owner: "owner", Name: "hotel"},
+		{Owner: "owner", Name: "india"},
+		{Owner: "owner", Name: "juliet"},
+		{Owner: "owner", Name: "kilo"},
 	}
-	source := newWorkerPoolVersionSource()
+	source := newControlledVersionSource()
+	uses := make([]ActionUse, 0, len(repositories)+1)
 	for _, repository := range repositories {
 		source.gates[repository] = make(chan struct{})
+		uses = append(uses, ActionUse{
+			Identifier: mustParseIdentifier(t, repository.Owner+"/"+repository.Name),
+			Ref:        "v1",
+		})
 	}
-	uses := []ActionUse{
-		{Action: "owner/alpha", Repository: repositories[0], Ref: "v1", Location: Location{Line: 1}},
-		{Action: "owner/alpha", Repository: repositories[0], Ref: "v1", Location: Location{Line: 2}},
-		{Action: "owner/bravo", Repository: repositories[1], Ref: "v1"},
-		{Action: "owner/charlie", Repository: repositories[2], Ref: "v1"},
-	}
-	service := NewCheckService(source)
-	service.workers = 3
-	done := startCheck(ctx, service, uses)
+	uses = append(uses, uses[0])
+	done := startCheck(ctx, NewCheckService(source), uses)
 
-	waitForLookupStarts(t, ctx, source, len(repositories))
+	waitForLookupStarts(t, ctx, source, 10)
+	select {
+	case repository := <-source.started:
+		t.Fatalf("lookup for %v exceeded concurrency limit", repository)
+	default:
+	}
 	for _, repository := range repositories {
 		close(source.gates[repository])
 	}
@@ -507,87 +519,32 @@ func TestCheckServiceLoadVersionsRunsRepositoriesConcurrently(t *testing.T) {
 			t.Fatalf("LatestRelease(%v) calls = %d, want 1", repository, got)
 		}
 	}
-	for _, result := range outcome.results {
-		if result.Status != CheckStatusUpToDate {
-			t.Fatalf("unexpected result: %#v", result)
-		}
-	}
 }
 
-func TestCheckServiceLoadVersionsCancelsAfterFirstError(t *testing.T) {
+func TestCheckCancelsLookupsAfterOperationalError(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	blocked := Repository{Owner: "owner", Name: "blocked"}
 	failed := Repository{Owner: "owner", Name: "failed"}
 	wantErr := errors.New("lookup failed")
-	source := newWorkerPoolVersionSource()
+	source := newControlledVersionSource()
 	source.gates[blocked] = make(chan struct{})
 	blockedStarted := make(chan struct{})
 	source.startedSignals[blocked] = blockedStarted
 	source.errorWaits[failed] = blockedStarted
 	source.errors[failed] = wantErr
 	uses := []ActionUse{
-		{Action: "owner/blocked", Repository: blocked, Ref: "v1"},
-		{Action: "owner/failed", Repository: failed, Ref: "v1"},
-		{Action: "owner/other-one", Repository: Repository{Owner: "owner", Name: "other-one"}, Ref: "v1"},
-		{Action: "owner/other-two", Repository: Repository{Owner: "owner", Name: "other-two"}, Ref: "v1"},
+		{Identifier: mustParseIdentifier(t, "owner/blocked"), Ref: "v1"},
+		{Identifier: mustParseIdentifier(t, "owner/failed"), Ref: "v1"},
 	}
-	service := NewCheckService(source)
-	service.workers = 2
-	done := startCheck(ctx, service, uses)
-
-	select {
-	case repository := <-source.errorReturned:
-		if repository != failed {
-			t.Fatalf("error came from %v, want %v", repository, failed)
-		}
-	case <-ctx.Done():
-		t.Fatalf("injected error was not returned: %v", ctx.Err())
-	}
-	close(source.gates[blocked])
-	outcome := waitForCheck(t, ctx, done)
+	outcome := waitForCheck(t, ctx, startCheck(ctx, NewCheckService(source), uses))
 	if !errors.Is(outcome.err, wantErr) {
 		t.Fatalf("Check error = %v, want %v", outcome.err, wantErr)
 	}
 }
 
-func TestCheckServiceLoadVersionsKeepsOtherResultsWhenRepositoryHasNoVersions(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	missing := Repository{Owner: "owner", Name: "missing"}
-	source := newWorkerPoolVersionSource()
-	source.noVersions[missing] = true
-	uses := []ActionUse{
-		{Action: "owner/alpha", Repository: Repository{Owner: "owner", Name: "alpha"}, Ref: "v1"},
-		{Action: "owner/missing", Repository: missing, Ref: "main"},
-		{Action: "owner/bravo", Repository: Repository{Owner: "owner", Name: "bravo"}, Ref: "v1"},
-	}
-	service := NewCheckService(source)
-	service.workers = 3
-
-	outcome := waitForCheck(t, ctx, startCheck(ctx, service, uses))
-	if outcome.err != nil {
-		t.Fatal(outcome.err)
-	}
-	if len(outcome.results) != len(uses) {
-		t.Fatalf("got %d results, want %d: %#v", len(outcome.results), len(uses), outcome.results)
-	}
-	for _, result := range outcome.results {
-		if result.Action == "owner/missing" {
-			if result.Status != CheckStatusUnknown || result.Latest.Tag != nil {
-				t.Fatalf("unexpected no-versions result: %#v", result)
-			}
-			continue
-		}
-		if result.Status != CheckStatusUpToDate {
-			t.Fatalf("unexpected result: %#v", result)
-		}
-	}
-}
-
-func TestCheckServiceLoadVersionsReturnsCallerCancellation(t *testing.T) {
+func TestCheckReturnsCallerCancellation(t *testing.T) {
 	deadline, cancelDeadline := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancelDeadline()
 	ctx, cancel := context.WithCancel(deadline)
@@ -598,19 +555,16 @@ func TestCheckServiceLoadVersionsReturnsCallerCancellation(t *testing.T) {
 		{Owner: "owner", Name: "bravo"},
 		{Owner: "owner", Name: "charlie"},
 	}
-	source := newWorkerPoolVersionSource()
+	source := newControlledVersionSource()
 	uses := make([]ActionUse, 0, len(repositories))
 	for _, repository := range repositories {
 		source.gates[repository] = make(chan struct{})
 		uses = append(uses, ActionUse{
-			Action:     repository.Owner + "/" + repository.Name,
-			Repository: repository,
+			Identifier: mustParseIdentifier(t, repository.Owner+"/"+repository.Name),
 			Ref:        "v1",
 		})
 	}
-	service := NewCheckService(source)
-	service.workers = 3
-	done := startCheck(ctx, service, uses)
+	done := startCheck(ctx, NewCheckService(source), uses)
 
 	waitForLookupStarts(t, deadline, source, len(repositories))
 	cancel()

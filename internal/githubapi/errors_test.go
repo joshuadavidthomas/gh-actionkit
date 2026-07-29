@@ -15,9 +15,8 @@ func TestNormalizeErrorClassifiesAuthenticationFailure(t *testing.T) {
 	cause := &api.HTTPError{StatusCode: http.StatusUnauthorized}
 
 	err := normalizeError(cause, time.Time{})
-	var githubError *Error
-	if !errors.As(err, &githubError) || githubError.Kind != ErrorAuthentication ||
-		githubError.StatusCode != http.StatusUnauthorized {
+	var githubError *githubError
+	if !errors.As(err, &githubError) || githubError.kind != errorAuthentication {
 		t.Fatalf("unexpected error: %#v", err)
 	}
 	if !errors.Is(err, cause) || !strings.Contains(err.Error(), "gh auth status") {
@@ -27,8 +26,8 @@ func TestNormalizeErrorClassifiesAuthenticationFailure(t *testing.T) {
 
 func TestNormalizeErrorClassifiesOnlyProvenForbiddenRateLimits(t *testing.T) {
 	ordinary := normalizeError(&api.HTTPError{StatusCode: http.StatusForbidden}, time.Time{})
-	var ordinaryError *Error
-	if !errors.As(ordinary, &ordinaryError) || ordinaryError.Kind != ErrorResponse {
+	var ordinaryError *githubError
+	if !errors.As(ordinary, &ordinaryError) || ordinaryError.kind != errorResponse {
 		t.Fatalf("ordinary forbidden response classified as rate limit: %v", ordinary)
 	}
 
@@ -38,13 +37,13 @@ func TestNormalizeErrorClassifiesOnlyProvenForbiddenRateLimits(t *testing.T) {
 		StatusCode: http.StatusForbidden,
 		Headers:    headers,
 	}, now)
-	var limitedError *Error
-	if !errors.As(limited, &limitedError) || limitedError.Kind != ErrorRateLimit {
+	var limitedError *githubError
+	if !errors.As(limited, &limitedError) || limitedError.kind != errorRateLimit {
 		t.Fatalf("unexpected rate-limit error: %v", limited)
 	}
 	wantRetry := now.Add(time.Minute)
-	if limitedError.RetryAt == nil || !limitedError.RetryAt.Equal(wantRetry) {
-		t.Fatalf("retry time=%v want=%v", limitedError.RetryAt, wantRetry)
+	if limitedError.retryAt == nil || !limitedError.retryAt.Equal(wantRetry) {
+		t.Fatalf("retry time=%v want=%v", limitedError.retryAt, wantRetry)
 	}
 }
 
@@ -69,19 +68,19 @@ func TestNormalizeErrorParsesPrimaryRateLimitReset(t *testing.T) {
 		StatusCode: http.StatusForbidden,
 		Headers:    headers,
 	}, time.Time{})
-	var githubError *Error
-	if !errors.As(err, &githubError) || githubError.Kind != ErrorRateLimit {
+	var githubError *githubError
+	if !errors.As(err, &githubError) || githubError.kind != errorRateLimit {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if githubError.RetryAt == nil || !githubError.RetryAt.Equal(reset) {
-		t.Fatalf("retry time=%v want=%v", githubError.RetryAt, reset)
+	if githubError.retryAt == nil || !githubError.retryAt.Equal(reset) {
+		t.Fatalf("retry time=%v want=%v", githubError.retryAt, reset)
 	}
 }
 
 func TestNormalizeErrorClassifiesTooManyRequests(t *testing.T) {
 	err := normalizeError(&api.HTTPError{StatusCode: http.StatusTooManyRequests}, time.Time{})
-	var githubError *Error
-	if !errors.As(err, &githubError) || githubError.Kind != ErrorRateLimit {
+	var githubError *githubError
+	if !errors.As(err, &githubError) || githubError.kind != errorRateLimit {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -93,8 +92,8 @@ func TestNormalizeErrorClassifiesGraphQLRateLimit(t *testing.T) {
 	}}}
 
 	err := normalizeError(cause, time.Time{})
-	var githubError *Error
-	if !errors.As(err, &githubError) || githubError.Kind != ErrorRateLimit {
+	var githubError *githubError
+	if !errors.As(err, &githubError) || githubError.kind != errorRateLimit {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if !errors.Is(err, cause) {

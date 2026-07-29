@@ -15,7 +15,7 @@ func TestSearchJSONUsesEmptyArray(t *testing.T) {
 		return []actions.SearchResult{}, nil
 	}
 	var stdout bytes.Buffer
-	command := commandForTest(newSearchCommandWithSearch(search), &stdout, &bytes.Buffer{}, "missing", "--json")
+	command := commandForTest(newSearchCommand(search), &stdout, &bytes.Buffer{}, "missing", "--json")
 
 	if err := command.Execute(); err != nil {
 		t.Fatal(err)
@@ -38,7 +38,7 @@ func TestSearchSanitizesHumanOutputAndPreservesJSON(t *testing.T) {
 
 	var humanOutput bytes.Buffer
 	humanCommand := commandForTest(
-		newSearchCommandWithSearch(search),
+		newSearchCommand(search),
 		&humanOutput,
 		&bytes.Buffer{},
 		"evil",
@@ -57,7 +57,7 @@ func TestSearchSanitizesHumanOutputAndPreservesJSON(t *testing.T) {
 
 	var jsonOutput bytes.Buffer
 	jsonCommand := commandForTest(
-		newSearchCommandWithSearch(search),
+		newSearchCommand(search),
 		&jsonOutput,
 		&bytes.Buffer{},
 		"evil",
@@ -84,7 +84,7 @@ func TestSearchForwardsOptions(t *testing.T) {
 	}
 	var stdout bytes.Buffer
 	command := commandForTest(
-		newSearchCommandWithSearch(search),
+		newSearchCommand(search),
 		&stdout,
 		&bytes.Buffer{},
 		"docker build",

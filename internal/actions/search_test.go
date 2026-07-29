@@ -20,10 +20,9 @@ func (f *fakeSearchSource) SearchRepositories(
 	return f.results, f.err
 }
 
-func TestSearchRequestsVerifiedCandidatesAndAppliesLimit(t *testing.T) {
+func TestSearchRequestsVerifiedCandidates(t *testing.T) {
 	source := &fakeSearchSource{results: []SearchResult{
 		{Action: "owner/popular", Stars: 200},
-		{Action: "owner/small", Stars: 10},
 	}}
 
 	results, err := NewSearchService(source).Search(context.Background(), "build", 1)

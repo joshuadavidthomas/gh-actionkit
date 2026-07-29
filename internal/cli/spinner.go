@@ -3,7 +3,6 @@ package cli
 import (
 	"fmt"
 	"io"
-	"sync"
 	"time"
 )
 
@@ -16,7 +15,6 @@ type spinner struct {
 	label  string
 	stop   chan struct{}
 	done   chan struct{}
-	once   sync.Once
 }
 
 func startCommandSpinner(stdout, stderr io.Writer, outputJSON bool, label string) *spinner {
@@ -65,8 +63,6 @@ func (s *spinner) Stop() {
 	if s.stop == nil {
 		return
 	}
-	s.once.Do(func() {
-		close(s.stop)
-		<-s.done
-	})
+	close(s.stop)
+	<-s.done
 }

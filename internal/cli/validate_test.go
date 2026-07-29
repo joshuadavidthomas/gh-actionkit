@@ -6,17 +6,19 @@ import (
 	"errors"
 	"io"
 	"testing"
+
+	"github.com/joshuadavidthomas/gh-actionkit/internal/tools"
 )
 
 func TestValidateReturnsFindingStatus(t *testing.T) {
-	validate := func(_ context.Context, _ string, outputJSON bool, _, _ io.Writer) (int, int, error) {
+	validate := func(_ context.Context, _ string, outputJSON bool, _, _ io.Writer) (tools.ValidationResult, error) {
 		if !outputJSON {
 			t.Fatal("expected JSON output")
 		}
-		return 2, 3, nil
+		return tools.ValidationResult{Files: 2, Findings: 3}, nil
 	}
 	command := commandForTest(
-		newValidateCommandWithValidate(validate),
+		newValidateCommand(validate),
 		&bytes.Buffer{},
 		&bytes.Buffer{},
 		"-C",
@@ -25,8 +27,7 @@ func TestValidateReturnsFindingStatus(t *testing.T) {
 	)
 
 	err := command.Execute()
-	var statusError StatusError
-	if !errors.As(err, &statusError) || statusError.Code != 1 {
+	if status, ok := ExitStatus(err); !ok || status != 1 {
 		t.Fatalf("expected status 1, got %v", err)
 	}
 }
@@ -36,12 +37,12 @@ func TestValidatePassesCommandContext(t *testing.T) {
 	cancel()
 
 	var received context.Context
-	validate := func(ctx context.Context, _ string, _ bool, _, _ io.Writer) (int, int, error) {
+	validate := func(ctx context.Context, _ string, _ bool, _, _ io.Writer) (tools.ValidationResult, error) {
 		received = ctx
-		return 0, 0, ctx.Err()
+		return tools.ValidationResult{}, ctx.Err()
 	}
 	command := commandForTest(
-		newValidateCommandWithValidate(validate),
+		newValidateCommand(validate),
 		&bytes.Buffer{},
 		&bytes.Buffer{},
 		"-C",
@@ -58,13 +59,13 @@ func TestValidatePassesCommandContext(t *testing.T) {
 }
 
 func TestValidateReportsNoWorkflowsWithoutPollutingJSON(t *testing.T) {
-	validate := func(_ context.Context, _ string, _ bool, _, _ io.Writer) (int, int, error) {
-		return 0, 0, nil
+	validate := func(_ context.Context, _ string, _ bool, _, _ io.Writer) (tools.ValidationResult, error) {
+		return tools.ValidationResult{}, nil
 	}
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	command := commandForTest(
-		newValidateCommandWithValidate(validate),
+		newValidateCommand(validate),
 		&stdout,
 		&stderr,
 		"-C",

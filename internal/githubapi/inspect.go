@@ -69,16 +69,18 @@ type inspectBlob struct {
 	IsTruncated bool    `json:"isTruncated"`
 }
 
-func (c *Client) InspectRepository(
+func (c *Client) InspectAction(
 	ctx context.Context,
-	repository actions.Repository,
+	identifier actions.ActionIdentifier,
 	ref string,
 ) (actions.RepositoryInspection, error) {
+	repository := identifier.Repository()
+	actionYML, actionYAML := identifier.ManifestCandidates()
 	variables := map[string]interface{}{
 		"owner":      repository.Owner,
 		"name":       repository.Name,
-		"actionYml":  ref + ":action.yml",
-		"actionYaml": ref + ":action.yaml",
+		"actionYml":  ref + ":" + actionYML,
+		"actionYaml": ref + ":" + actionYAML,
 	}
 	var response inspectRepositoryResponse
 	if err := c.graphQL.DoWithContext(ctx, inspectRepositoryQuery, variables, &response); err != nil {
@@ -93,9 +95,13 @@ func (c *Client) InspectRepository(
 	}
 
 	source := response.Repository
+	canonicalRepository, err := actions.ParseRepository(source.NameWithOwner)
+	if err != nil {
+		return actions.RepositoryInspection{}, fmt.Errorf("parse GitHub repository identity: %w", err)
+	}
 	inspection := actions.RepositoryInspection{
-		Action: source.NameWithOwner,
-		Repository: actions.RepositoryDetails{
+		Repository: canonicalRepository,
+		Details: actions.RepositoryDetails{
 			Description: source.Description,
 			URL:         source.URL,
 			Owner: actions.RepositoryOwner{
@@ -107,17 +113,17 @@ func (c *Client) InspectRepository(
 		},
 	}
 	if source.LicenseInfo != nil {
-		inspection.Repository.License = &actions.RepositoryLicense{
+		inspection.Details.License = &actions.RepositoryLicense{
 			Name:   source.LicenseInfo.Name,
 			SPDXID: source.LicenseInfo.SPDXID,
 		}
 	}
-	manifest, found, err := inspectManifestFile("action.yml", source.ActionYML)
+	manifest, found, err := inspectManifestFile(actionYML, source.ActionYML)
 	if err != nil {
 		return actions.RepositoryInspection{}, err
 	}
 	if !found {
-		manifest, found, err = inspectManifestFile("action.yaml", source.ActionYAML)
+		manifest, found, err = inspectManifestFile(actionYAML, source.ActionYAML)
 		if err != nil {
 			return actions.RepositoryInspection{}, err
 		}

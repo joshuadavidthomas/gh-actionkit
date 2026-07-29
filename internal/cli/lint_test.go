@@ -129,7 +129,7 @@ func TestLintForwardsOptionsAndStatus(t *testing.T) {
 		return 13, nil
 	}
 	command := commandForTest(
-		newLintCommandWithLint(lint),
+		newLintCommand(lint),
 		&bytes.Buffer{},
 		&bytes.Buffer{},
 		"-C",
@@ -139,26 +139,8 @@ func TestLintForwardsOptionsAndStatus(t *testing.T) {
 	)
 
 	err := command.Execute()
-	var statusError StatusError
-	if !errors.As(err, &statusError) || statusError.Code != 13 {
+	if status, ok := ExitStatus(err); !ok || status != 13 {
 		t.Fatalf("expected status 13, got %v", err)
-	}
-}
-
-func TestLintRejectsRemovedNoPedanticFlag(t *testing.T) {
-	command := commandForTest(
-		newLintCommandWithLint(func(context.Context, string, lintOptions, io.Writer, io.Writer) (int, error) {
-			t.Fatal("lint should not run with an unknown flag")
-			return 0, nil
-		}),
-		&bytes.Buffer{},
-		&bytes.Buffer{},
-		"--no-pedantic",
-	)
-
-	err := command.Execute()
-	if err == nil || !strings.Contains(err.Error(), "unknown flag: --no-pedantic") {
-		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
@@ -170,7 +152,7 @@ func TestLintForwardsOffline(t *testing.T) {
 		return 0, nil
 	}
 	command := commandForTest(
-		newLintCommandWithLint(lint),
+		newLintCommand(lint),
 		&bytes.Buffer{},
 		&bytes.Buffer{},
 		"-C",

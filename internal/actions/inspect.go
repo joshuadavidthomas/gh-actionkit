@@ -10,7 +10,7 @@ import (
 	"go.yaml.in/yaml/v3"
 )
 
-var ErrNoActionManifest = errors.New("root action.yml or action.yaml not found")
+var ErrNoActionManifest = errors.New("action manifest not found")
 
 type RepositoryOwner struct {
 	Login string `json:"login"`
@@ -37,8 +37,8 @@ type RepositoryDetails struct {
 }
 
 type RepositoryInspection struct {
-	Action     string
-	Repository RepositoryDetails
+	Repository Repository
+	Details    RepositoryDetails
 	Manifest   *ManifestFile
 }
 
@@ -75,7 +75,7 @@ type InspectResult struct {
 
 type InspectSource interface {
 	VersionSource
-	InspectRepository(context.Context, Repository, string) (RepositoryInspection, error)
+	InspectAction(context.Context, ActionIdentifier, string) (RepositoryInspection, error)
 }
 
 type InspectService struct {
@@ -86,20 +86,15 @@ func NewInspectService(source InspectSource) InspectService {
 	return InspectService{source: source}
 }
 
-func (s InspectService) Inspect(ctx context.Context, action string) (InspectResult, error) {
-	repository, err := parseRepository(action)
-	if err != nil {
-		return InspectResult{}, err
-	}
-
+func (s InspectService) Inspect(ctx context.Context, identifier ActionIdentifier) (InspectResult, error) {
 	manifestRef := "HEAD"
 	var latest *Version
-	resolved, err := NewVersionService(s.source).Latest(ctx, action)
+	resolved, err := NewVersionService(s.source).Latest(ctx, identifier.Repository())
 	switch {
 	case err == nil:
 		latest = &resolved
 		manifestRef = resolved.Tag
-		if resolved.SHA != nil && commitSHAPattern.MatchString(*resolved.SHA) {
+		if resolved.SHA != nil && IsCommitSHA(*resolved.SHA) {
 			manifestRef = *resolved.SHA
 		}
 	case errors.Is(err, ErrNoVersions):
@@ -107,27 +102,36 @@ func (s InspectService) Inspect(ctx context.Context, action string) (InspectResu
 		return InspectResult{}, err
 	}
 
-	inspection, err := s.source.InspectRepository(ctx, repository, manifestRef)
+	inspection, err := s.source.InspectAction(ctx, identifier, manifestRef)
 	if err != nil {
-		return InspectResult{}, fmt.Errorf("inspect repository %s: %w", action, err)
+		return InspectResult{}, fmt.Errorf("inspect action %s: %w", identifier, err)
 	}
+	canonicalIdentifier := identifier.WithRepository(inspection.Repository)
 	if inspection.Manifest == nil {
-		return InspectResult{}, fmt.Errorf("inspect %s at %s: %w", action, manifestRef, ErrNoActionManifest)
+		yml, yaml := canonicalIdentifier.ManifestCandidates()
+		return InspectResult{}, fmt.Errorf(
+			"inspect %s at %s: %s or %s: %w",
+			canonicalIdentifier,
+			manifestRef,
+			yml,
+			yaml,
+			ErrNoActionManifest,
+		)
 	}
-	manifest, err := parseActionManifest(*inspection.Manifest, inspection.Action)
+	manifest, err := parseActionManifest(*inspection.Manifest, canonicalIdentifier.String())
 	if err != nil {
 		return InspectResult{}, err
 	}
 	manifest.Ref = manifestRef
 
 	result := InspectResult{
-		Action:     inspection.Action,
-		Repository: inspection.Repository,
+		Action:     canonicalIdentifier.String(),
+		Repository: inspection.Details,
 		Manifest:   manifest,
 		Latest:     latest,
 	}
-	if latest != nil && latest.SHA != nil && commitSHAPattern.MatchString(*latest.SHA) {
-		pinnedUses := fmt.Sprintf("uses: %s@%s # %s", inspection.Action, *latest.SHA, latest.Tag)
+	if latest != nil && latest.SHA != nil && IsCommitSHA(*latest.SHA) {
+		pinnedUses := fmt.Sprintf("uses: %s@%s # %s", canonicalIdentifier, *latest.SHA, latest.Tag)
 		result.PinnedUses = &pinnedUses
 	}
 	return result, nil

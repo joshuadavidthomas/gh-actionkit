@@ -65,7 +65,10 @@ func TestVersionServiceReusesLatestSHAForMajorTag(t *testing.T) {
 		calls:        calls,
 	})
 
-	info, err := service.Lookup(context.Background(), "actions/checkout")
+	info, err := service.Lookup(
+		context.Background(),
+		Repository{Owner: "actions", Name: "checkout"},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,7 +90,10 @@ func TestVersionServiceUsesLatestRelease(t *testing.T) {
 		},
 	})
 
-	info, err := service.Lookup(context.Background(), "actions/checkout")
+	info, err := service.Lookup(
+		context.Background(),
+		Repository{Owner: "actions", Name: "checkout"},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -119,7 +125,10 @@ func (s *recordingVersionSource) ResolveTag(_ context.Context, _ Repository, tag
 func TestVersionServiceLatestDoesNotResolveMajorTag(t *testing.T) {
 	source := &recordingVersionSource{}
 
-	version, err := NewVersionService(source).Latest(context.Background(), "actions/checkout")
+	version, err := NewVersionService(source).Latest(
+		context.Background(),
+		Repository{Owner: "actions", Name: "checkout"},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -134,7 +143,10 @@ func TestVersionServiceFallsBackToHighestStableTag(t *testing.T) {
 		refs: map[string]string{"v2.1.0": "latest-sha"},
 	})
 
-	info, err := service.Lookup(context.Background(), "owner/action")
+	info, err := service.Lookup(
+		context.Background(),
+		Repository{Owner: "owner", Name: "action"},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -151,7 +163,7 @@ func TestVersionServiceRejectsPrereleaseOnlyTags(t *testing.T) {
 		tags: []string{"v3.0.0-beta.1", "v2.0.0-rc.1"},
 	})
 
-	_, err := service.Lookup(context.Background(), "owner/action")
+	_, err := service.Lookup(context.Background(), Repository{Owner: "owner", Name: "action"})
 	if err == nil {
 		t.Fatal("expected an error")
 	}
@@ -163,7 +175,10 @@ func TestVersionServiceFallsBackToNonSemanticTag(t *testing.T) {
 		refs: map[string]string{"release-current": "commit-sha"},
 	})
 
-	info, err := service.Lookup(context.Background(), "owner/action")
+	info, err := service.Lookup(
+		context.Background(),
+		Repository{Owner: "owner", Name: "action"},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -172,18 +187,13 @@ func TestVersionServiceFallsBackToNonSemanticTag(t *testing.T) {
 	}
 }
 
-func TestVersionServiceRejectsInvalidAction(t *testing.T) {
-	service := NewVersionService(fakeVersionSource{})
-	_, err := service.Lookup(context.Background(), "actions/checkout/subpath")
-	if err == nil {
-		t.Fatal("expected an error")
-	}
-}
-
 func TestVersionServiceReportsSourceErrors(t *testing.T) {
 	sourceErr := errors.New("rate limited")
 	service := NewVersionService(fakeVersionSource{err: sourceErr})
-	_, err := service.Lookup(context.Background(), "actions/checkout")
+	_, err := service.Lookup(
+		context.Background(),
+		Repository{Owner: "actions", Name: "checkout"},
+	)
 	if !errors.Is(err, sourceErr) {
 		t.Fatalf("expected source error, got %v", err)
 	}

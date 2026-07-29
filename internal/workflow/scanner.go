@@ -5,7 +5,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/joshuadavidthomas/gh-actionkit/internal/actions"
@@ -72,7 +71,6 @@ func FindFiles(repository string) ([]string, error) {
 			paths = append(paths, filepath.Join(directory, name))
 		}
 	}
-	sort.Strings(paths)
 	return paths, nil
 }
 
@@ -170,15 +168,13 @@ func parseUse(spec, file string, line int) (actions.ActionUse, bool) {
 	if separator < 1 || separator == len(spec)-1 {
 		return actions.ActionUse{}, false
 	}
-	action, ref := spec[:separator], spec[separator+1:]
-	parts := strings.Split(action, "/")
-	if len(parts) < 2 || parts[0] == "" || parts[1] == "" {
+	identifier, err := actions.ParseActionIdentifier(spec[:separator])
+	if err != nil {
 		return actions.ActionUse{}, false
 	}
 	return actions.ActionUse{
-		Action:     action,
-		Repository: actions.Repository{Owner: parts[0], Name: parts[1]},
-		Ref:        ref,
+		Identifier: identifier,
+		Ref:        spec[separator+1:],
 		Location:   actions.Location{File: file, Line: line},
 	}, true
 }

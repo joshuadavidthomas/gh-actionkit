@@ -125,8 +125,8 @@ func TestResolveCredentialsPreservesCancellation(t *testing.T) {
 
 func assertAuthenticationError(t *testing.T, err error, wantCause string) {
 	t.Helper()
-	var githubError *Error
-	if !errors.As(err, &githubError) || githubError.Kind != ErrorAuthentication {
+	var githubError *githubError
+	if !errors.As(err, &githubError) || githubError.kind != errorAuthentication {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if githubError.cause == nil || githubError.cause.Error() != wantCause {

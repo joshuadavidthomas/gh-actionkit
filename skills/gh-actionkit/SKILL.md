@@ -32,9 +32,9 @@ Stop if the installed version remains too old. `version`, `search`, `inspect`, `
 | Task | Command |
 | --- | --- |
 | Find an Action by purpose | `gh actionkit search "QUERY" --json` |
-| Inspect an Action's repository, manifest, and stable pin | `gh actionkit inspect OWNER/REPO --json` |
-| Resolve an Action's stable tags and full SHAs | `gh actionkit version OWNER/REPO --json` |
-| Print a full-SHA-pinned `uses:` line | `gh actionkit version OWNER/REPO --snippet` |
+| Inspect an Action's repository, manifest, and stable pin | `gh actionkit inspect OWNER/REPO[/PATH] --json` |
+| Resolve an Action's stable tags and full SHAs | `gh actionkit version OWNER/REPO[/PATH] --json` |
+| Print a full-SHA-pinned `uses:` line | `gh actionkit version OWNER/REPO[/PATH] --snippet` |
 | Find stale or unknown Action refs | `gh actionkit check -C PATH --json` |
 | Enforce Action ref and owner policies | `gh actionkit check -C PATH --require-sha --fail-on-unknown --allow-owner actions --allow-owner github --json` |
 | Validate workflow syntax and expressions | `gh actionkit validate -C PATH --json` |
@@ -44,9 +44,9 @@ Use `--json` when another tool or the agent will read the result. Human output m
 
 ## Find and pin an Action
 
-1. Run `search` when the user has a capability in mind but no repository. Search only proves that a repository has a root `action.yml` or `action.yaml`.
-2. Run `inspect OWNER/REPO --json` for repository ownership, archived state, last push, license, and the latest stable release's manifest inputs, outputs, runtime, and pinned reference. Inspect permissions and source code separately before adding it.
-3. Run `version OWNER/REPO --json` when only version data is needed, or add `--snippet` for a copy-ready `uses:` line.
+1. Run `search` when the user has a capability in mind but no repository. Search only proves that a repository has a root `action.yml` or `action.yaml`; it does not discover subdirectory Actions.
+2. Run `inspect OWNER/REPO[/PATH] --json` for repository ownership, archived state, last push, license, and the latest stable release's manifest inputs, outputs, runtime, and pinned reference. `PATH` names the directory containing `action.yml` or `action.yaml`. Inspect does not fall back to the root manifest when that directory has none. Inspect permissions and source code separately before adding it.
+3. Run `version OWNER/REPO[/PATH] --json` when only version data is needed, or add `--snippet` for a copy-ready `uses:` line. Version data has repository scope, but output and snippets keep the full Action identifier; `version` does not verify a subpath manifest.
 4. With JSON output, confirm that `latest.sha` is a non-null, 40-character hexadecimal commit SHA. Stop without editing if it is missing or malformed.
 5. Use that SHA for an exact pin and put `latest.tag` in a comment. Snippet output does this for you:
 
@@ -84,8 +84,9 @@ Keep stdout for JSON. Put notes and diagnostics on stderr or outside captured co
 ## Scope and edge cases
 
 - `check`, `lint`, and `validate` accept `-C PATH` or `--repo PATH`; both default to the current directory.
+- Action identifiers use `OWNER/REPO[/PATH...]`. Every slash-delimited segment must be nonempty; `PATH` is the manifest directory.
 - Workflow scans cover `.yml` and `.yaml` files directly inside `.github/workflows`.
-- `check` reads job-level reusable workflows and step-level Actions. It ignores local paths and `docker://` uses.
+- `check` reads job-level reusable workflows and step-level Actions, including Actions in repository subpaths. It ignores local paths and `docker://` uses.
 - Branches, unresolved refs, and full SHAs that differ from the current stable refs appear as unknown rather than outdated. A SHA alone does not prove commit order.
 - `version` prefers the latest stable release, then a stable semantic tag. If neither exists, it may fall back to a non-semantic tag; it rejects semantic prerelease tags.
 - If a documented command is absent, verify gh-actionkit is v0.5.0 or newer instead of improvising.

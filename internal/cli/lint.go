@@ -20,10 +20,6 @@ type workflowLint func(context.Context, string, lintOptions, io.Writer, io.Write
 type credentialResolver func(context.Context) (githubapi.Credentials, error)
 type zizmorLint func(context.Context, string, tools.ZizmorOptions, io.Writer, io.Writer) (int, error)
 
-func newLintCommand() *cobra.Command {
-	return newLintCommandWithLint(lintWorkflows)
-}
-
 func lintWorkflows(
 	ctx context.Context,
 	repository string,
@@ -38,7 +34,7 @@ func lintWorkflows(
 		stdout,
 		stderr,
 		githubapi.ResolveCredentials,
-		tools.NewZizmor().Lint,
+		tools.Lint,
 	)
 }
 
@@ -71,7 +67,7 @@ func lintWorkflowsWith(
 	return lint(ctx, repository, zizmorOptions, stdout, stderr)
 }
 
-func newLintCommandWithLint(lint workflowLint) *cobra.Command {
+func newLintCommand(lint workflowLint) *cobra.Command {
 	var repository string
 	var outputJSON bool
 	var pedantic bool
@@ -105,7 +101,7 @@ func newLintCommandWithLint(lint workflowLint) *cobra.Command {
 				return err
 			}
 			if exitCode != 0 {
-				return StatusError{Code: exitCode}
+				return exitStatusError(exitCode)
 			}
 			return nil
 		},

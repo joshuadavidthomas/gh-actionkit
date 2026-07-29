@@ -17,8 +17,8 @@ import (
 
 func TestCheckWritesJSONBeforeReturningFindingStatus(t *testing.T) {
 	tag := "v3"
-	check := func(context.Context, string) (actions.CheckReport, error) {
-		return actions.CheckReport{
+	check := func(context.Context, string) (checkReport, error) {
+		return checkReport{
 			WorkflowFiles: 1,
 			Uses:          1,
 			Results: []actions.CheckResult{{
@@ -29,13 +29,9 @@ func TestCheckWritesJSONBeforeReturningFindingStatus(t *testing.T) {
 		}, nil
 	}
 	var stdout bytes.Buffer
-	command := commandForTest(newCheckCommandWithCheck(check), &stdout, &bytes.Buffer{}, "-C", t.TempDir(), "--json")
+	command := commandForTest(newCheckCommand(check), &stdout, &bytes.Buffer{}, "-C", t.TempDir(), "--json")
 
-	err := command.Execute()
-	var statusError StatusError
-	if !errors.As(err, &statusError) || statusError.Code != 1 {
-		t.Fatalf("expected status 1, got %v", err)
-	}
+	requireFindingStatus(t, command.Execute())
 	if !strings.Contains(stdout.String(), `"status": "update_available"`) {
 		t.Fatalf("unexpected JSON: %q", stdout.String())
 	}
@@ -48,8 +44,8 @@ func TestCheckWritesJSONBeforeReturningFindingStatus(t *testing.T) {
 }
 
 func TestCheckPoliciesWriteViolationsBeforeReturningFindingStatus(t *testing.T) {
-	check := func(context.Context, string) (actions.CheckReport, error) {
-		return actions.CheckReport{
+	check := func(context.Context, string) (checkReport, error) {
+		return checkReport{
 			WorkflowFiles: 1,
 			Uses:          1,
 			Results: []actions.CheckResult{{
@@ -61,7 +57,7 @@ func TestCheckPoliciesWriteViolationsBeforeReturningFindingStatus(t *testing.T) 
 	}
 	var stdout bytes.Buffer
 	command := commandForTest(
-		newCheckCommandWithCheck(check),
+		newCheckCommand(check),
 		&stdout,
 		&bytes.Buffer{},
 		"-C",
@@ -73,11 +69,7 @@ func TestCheckPoliciesWriteViolationsBeforeReturningFindingStatus(t *testing.T) 
 		"actions",
 	)
 
-	err := command.Execute()
-	var statusError StatusError
-	if !errors.As(err, &statusError) || statusError.Code != 1 {
-		t.Fatalf("expected status 1, got %v", err)
-	}
+	requireFindingStatus(t, command.Execute())
 	for _, violation := range []string{`"unpinned"`, `"unknown"`, `"disallowed_owner"`} {
 		if !strings.Contains(stdout.String(), violation) {
 			t.Fatalf("JSON does not contain %s: %q", violation, stdout.String())
@@ -86,8 +78,8 @@ func TestCheckPoliciesWriteViolationsBeforeReturningFindingStatus(t *testing.T) 
 }
 
 func TestCheckAcceptsRepeatedAllowedOwners(t *testing.T) {
-	check := func(context.Context, string) (actions.CheckReport, error) {
-		return actions.CheckReport{
+	check := func(context.Context, string) (checkReport, error) {
+		return checkReport{
 			WorkflowFiles: 1,
 			Uses:          3,
 			Results: []actions.CheckResult{
@@ -99,7 +91,7 @@ func TestCheckAcceptsRepeatedAllowedOwners(t *testing.T) {
 	}
 	var stdout bytes.Buffer
 	command := commandForTest(
-		newCheckCommandWithCheck(check),
+		newCheckCommand(check),
 		&stdout,
 		&bytes.Buffer{},
 		"-C",
@@ -111,19 +103,15 @@ func TestCheckAcceptsRepeatedAllowedOwners(t *testing.T) {
 		"github",
 	)
 
-	err := command.Execute()
-	var statusError StatusError
-	if !errors.As(err, &statusError) || statusError.Code != 1 {
-		t.Fatalf("expected status 1, got %v", err)
-	}
+	requireFindingStatus(t, command.Execute())
 	if count := strings.Count(stdout.String(), `"disallowed_owner"`); count != 1 {
 		t.Fatalf("disallowed owner violations = %d, want 1: %q", count, stdout.String())
 	}
 }
 
 func TestCheckUnknownDoesNotFailWithoutPolicy(t *testing.T) {
-	check := func(context.Context, string) (actions.CheckReport, error) {
-		return actions.CheckReport{
+	check := func(context.Context, string) (checkReport, error) {
+		return checkReport{
 			WorkflowFiles: 1,
 			Uses:          1,
 			Results: []actions.CheckResult{{
@@ -133,7 +121,7 @@ func TestCheckUnknownDoesNotFailWithoutPolicy(t *testing.T) {
 			}},
 		}, nil
 	}
-	command := commandForTest(newCheckCommandWithCheck(check), &bytes.Buffer{}, &bytes.Buffer{}, "-C", t.TempDir())
+	command := commandForTest(newCheckCommand(check), &bytes.Buffer{}, &bytes.Buffer{}, "-C", t.TempDir())
 
 	if err := command.Execute(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -143,17 +131,17 @@ func TestCheckUnknownDoesNotFailWithoutPolicy(t *testing.T) {
 func TestCheckEmptyJSONExplainsScanResultOnStderr(t *testing.T) {
 	tests := []struct {
 		name       string
-		report     actions.CheckReport
+		report     checkReport
 		wantStderr string
 	}{
 		{
 			name:       "no workflow files",
-			report:     actions.CheckReport{Results: []actions.CheckResult{}},
+			report:     checkReport{Results: []actions.CheckResult{}},
 			wantStderr: "No workflow files found in .github/workflows\n",
 		},
 		{
 			name: "no remote action uses",
-			report: actions.CheckReport{
+			report: checkReport{
 				WorkflowFiles: 1,
 				Results:       []actions.CheckResult{},
 			},
@@ -161,7 +149,7 @@ func TestCheckEmptyJSONExplainsScanResultOnStderr(t *testing.T) {
 		},
 		{
 			name: "clean result",
-			report: actions.CheckReport{
+			report: checkReport{
 				WorkflowFiles: 1,
 				Uses:          1,
 				Results:       []actions.CheckResult{},
@@ -171,12 +159,12 @@ func TestCheckEmptyJSONExplainsScanResultOnStderr(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			check := func(context.Context, string) (actions.CheckReport, error) {
+			check := func(context.Context, string) (checkReport, error) {
 				return test.report, nil
 			}
 			var stdout bytes.Buffer
 			var stderr bytes.Buffer
-			command := commandForTest(newCheckCommandWithCheck(check), &stdout, &stderr, "-C", t.TempDir(), "--json")
+			command := commandForTest(newCheckCommand(check), &stdout, &stderr, "-C", t.TempDir(), "--json")
 
 			if err := command.Execute(); err != nil {
 				t.Fatal(err)
@@ -255,7 +243,7 @@ func TestCheckCommandEndToEnd(t *testing.T) {
 	t.Run("JSON captures classifications, policies, and locations", func(t *testing.T) {
 		var stdout bytes.Buffer
 		command := commandForTest(
-			newCheckCommandWithCheck(check),
+			newCheckCommand(check),
 			&stdout,
 			&bytes.Buffer{},
 			"--repo",
@@ -293,7 +281,7 @@ func TestCheckCommandEndToEnd(t *testing.T) {
 	t.Run("human output shows each classification", func(t *testing.T) {
 		var stdout bytes.Buffer
 		command := commandForTest(
-			newCheckCommandWithCheck(check),
+			newCheckCommand(check),
 			&stdout,
 			&bytes.Buffer{},
 			"--repo",
@@ -311,7 +299,7 @@ func TestCheckCommandEndToEnd(t *testing.T) {
 	t.Run("only current refs return success", func(t *testing.T) {
 		directory := t.TempDir()
 		writeWorkflow(t, directory, "name: Current\njobs:\n  test:\n    steps:\n      - uses: actions/checkout@"+checkoutSHA+"\n")
-		command := commandForTest(newCheckCommandWithCheck(check), &bytes.Buffer{}, &bytes.Buffer{}, "--repo", directory)
+		command := commandForTest(newCheckCommand(check), &bytes.Buffer{}, &bytes.Buffer{}, "--repo", directory)
 
 		if err := command.Execute(); err != nil {
 			t.Fatalf("Execute() error = %v", err)
@@ -322,7 +310,7 @@ func TestCheckCommandEndToEnd(t *testing.T) {
 		directory := t.TempDir()
 		writeWorkflow(t, directory, "name: Policy\njobs:\n  test:\n    steps:\n      - uses: other/tool@v1\n")
 		command := commandForTest(
-			newCheckCommandWithCheck(check),
+			newCheckCommand(check),
 			&bytes.Buffer{},
 			&bytes.Buffer{},
 			"--repo",
@@ -338,7 +326,7 @@ func TestCheckCommandEndToEnd(t *testing.T) {
 	t.Run("empty scan keeps JSON on stdout and explains on stderr", func(t *testing.T) {
 		var stdout bytes.Buffer
 		var stderr bytes.Buffer
-		command := commandForTest(newCheckCommandWithCheck(check), &stdout, &stderr, "--repo", t.TempDir(), "--json")
+		command := commandForTest(newCheckCommand(check), &stdout, &stderr, "--repo", t.TempDir(), "--json")
 
 		if err := command.Execute(); err != nil {
 			t.Fatal(err)
@@ -371,12 +359,12 @@ func writeWorkflow(t *testing.T, directory, content string) {
 }
 
 func realCheckWithSource(source actions.VersionSource) actionCheck {
-	return func(ctx context.Context, repository string) (actions.CheckReport, error) {
+	return func(ctx context.Context, repository string) (checkReport, error) {
 		scan, err := workflow.ScanRepository(repository)
 		if err != nil {
-			return actions.CheckReport{}, err
+			return checkReport{}, err
 		}
-		report := actions.CheckReport{WorkflowFiles: scan.Files, Uses: len(scan.Uses), Results: []actions.CheckResult{}}
+		report := checkReport{WorkflowFiles: scan.Files, Uses: len(scan.Uses), Results: []actions.CheckResult{}}
 		if len(scan.Uses) == 0 {
 			return report, nil
 		}
@@ -387,8 +375,7 @@ func realCheckWithSource(source actions.VersionSource) actionCheck {
 
 func requireFindingStatus(t *testing.T, err error) {
 	t.Helper()
-	var statusError StatusError
-	if !errors.As(err, &statusError) || statusError.Code != 1 {
+	if status, ok := ExitStatus(err); !ok || status != 1 {
 		t.Fatalf("expected status 1, got %v", err)
 	}
 }
@@ -448,14 +435,14 @@ func (failingWriter) Write([]byte) (int, error) {
 }
 
 func TestCheckPropagatesTextOutputErrors(t *testing.T) {
-	check := func(context.Context, string) (actions.CheckReport, error) {
-		return actions.CheckReport{
+	check := func(context.Context, string) (checkReport, error) {
+		return checkReport{
 			WorkflowFiles: 1,
 			Uses:          1,
 			Results:       []actions.CheckResult{{Action: "owner/action"}},
 		}, nil
 	}
-	command := commandForTest(newCheckCommandWithCheck(check), failingWriter{}, &bytes.Buffer{}, "-C", t.TempDir())
+	command := commandForTest(newCheckCommand(check), failingWriter{}, &bytes.Buffer{}, "-C", t.TempDir())
 
 	if err := command.Execute(); err == nil {
 		t.Fatal("expected an error")
@@ -463,11 +450,11 @@ func TestCheckPropagatesTextOutputErrors(t *testing.T) {
 }
 
 func TestCheckReportsNoWorkflowFiles(t *testing.T) {
-	check := func(context.Context, string) (actions.CheckReport, error) {
-		return actions.CheckReport{}, nil
+	check := func(context.Context, string) (checkReport, error) {
+		return checkReport{}, nil
 	}
 	var stdout bytes.Buffer
-	command := commandForTest(newCheckCommandWithCheck(check), &stdout, &bytes.Buffer{}, "-C", t.TempDir())
+	command := commandForTest(newCheckCommand(check), &stdout, &bytes.Buffer{}, "-C", t.TempDir())
 
 	if err := command.Execute(); err != nil {
 		t.Fatal(err)
@@ -549,20 +536,6 @@ func TestRenderCheckResultsUsesColorAndFitsWidth(t *testing.T) {
 	for _, line := range strings.Split(output, "\n") {
 		if width := lipgloss.Width(line); width > 80 {
 			t.Errorf("line width = %d, want at most 80: %q", width, line)
-		}
-	}
-}
-
-func TestFormatCheckSHA(t *testing.T) {
-	for _, test := range []struct {
-		sha  string
-		want string
-	}{
-		{sha: "short", want: "short"},
-		{sha: "0123456789abcdef0123456789abcdef01234567", want: "0123456789ab"},
-	} {
-		if got := formatCheckSHA(test.sha); got != test.want {
-			t.Errorf("formatCheckSHA(%q) = %q, want %q", test.sha, got, test.want)
 		}
 	}
 }

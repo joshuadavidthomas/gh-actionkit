@@ -79,7 +79,7 @@ func TestFindFilesSkipsSymlinkedWorkflowEntries(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.Files != 1 || len(result.Uses) != 1 || result.Uses[0].Action != "actions/checkout" {
+	if result.Files != 1 || len(result.Uses) != 1 || result.Uses[0].Identifier.String() != "actions/checkout" {
 		t.Fatalf("unexpected scan result: %#v", result)
 	}
 }
@@ -174,13 +174,13 @@ jobs:
 	if result.Files != 1 || len(result.Uses) != 3 {
 		t.Fatalf("unexpected result: %#v", result)
 	}
-	if result.Uses[0].Action != "owner/workflows/.github/workflows/test.yml" || result.Uses[0].Ref != "v2" {
+	if result.Uses[0].Identifier.String() != "owner/workflows/.github/workflows/test.yml" || result.Uses[0].Ref != "v2" {
 		t.Fatalf("unexpected reusable workflow: %#v", result.Uses[0])
 	}
 	if result.Uses[1].Location.Line != 9 || result.Uses[1].Location.File != ".github/workflows/ci.yml" {
 		t.Fatalf("unexpected checkout location: %#v", result.Uses[1].Location)
 	}
-	if result.Uses[2].Repository.Name != "repo" {
+	if result.Uses[2].Identifier.Repository().Name != "repo" {
 		t.Fatalf("subpath repository parsed incorrectly: %#v", result.Uses[2])
 	}
 }
@@ -238,7 +238,7 @@ jobs:
 	}
 	for index, expected := range want {
 		use := result.Uses[index]
-		if use.Action != expected.action || use.Ref != expected.ref || use.Location.File != ".github/workflows/aliases.yml" || use.Location.Line != expected.line {
+		if use.Identifier.String() != expected.action || use.Ref != expected.ref || use.Location.File != ".github/workflows/aliases.yml" || use.Location.Line != expected.line {
 			t.Errorf("use %d = %#v, want action %q, ref %q, file %q, line %d", index, use, expected.action, expected.ref, ".github/workflows/aliases.yml", expected.line)
 		}
 	}
@@ -284,8 +284,21 @@ func TestScanRepositoryResolvesAliasedJobsAndSteps(t *testing.T) {
 	}
 	for index, expected := range want {
 		use := result.Uses[index]
-		if use.Action != expected.action || use.Ref != expected.ref || use.Location.Line != expected.line {
+		if use.Identifier.String() != expected.action || use.Ref != expected.ref || use.Location.Line != expected.line {
 			t.Errorf("use %d = %#v, want action %q, ref %q, line %d", index, use, expected.action, expected.ref, expected.line)
+		}
+	}
+}
+
+func TestParseUseRejectsMalformedActionIdentifiers(t *testing.T) {
+	for _, spec := range []string{
+		"owner/repo/@v1",
+		"owner/repo//path@v1",
+		"owner//path@v1",
+		"/repo@v1",
+	} {
+		if _, ok := parseUse(spec, "workflow.yml", 1); ok {
+			t.Errorf("parseUse(%q) accepted malformed identifier", spec)
 		}
 	}
 }

@@ -8,7 +8,16 @@ import (
 	"github.com/joshuadavidthomas/gh-actionkit/internal/actions"
 )
 
-func TestInspectRepositoryMapsMetadataAndPrefersActionYML(t *testing.T) {
+func parseActionIdentifier(t testing.TB, value string) actions.ActionIdentifier {
+	t.Helper()
+	identifier, err := actions.ParseActionIdentifier(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return identifier
+}
+
+func TestInspectActionMapsMetadataAndPrefersActionYML(t *testing.T) {
 	graphQL := &fakeGraphQLClient{response: `{
 		"repository": {
 			"nameWithOwner": "actions/checkout",
@@ -24,9 +33,9 @@ func TestInspectRepositoryMapsMetadataAndPrefersActionYML(t *testing.T) {
 	}`}
 	client := &Client{graphQL: graphQL}
 
-	inspection, err := client.InspectRepository(
+	inspection, err := client.InspectAction(
 		context.Background(),
-		actions.Repository{Owner: "Actions", Name: "Checkout"},
+		parseActionIdentifier(t, "Actions/Checkout/sub/action"),
 		"0123456789abcdef0123456789abcdef01234567",
 	)
 	if err != nil {
@@ -34,31 +43,32 @@ func TestInspectRepositoryMapsMetadataAndPrefersActionYML(t *testing.T) {
 	}
 	if graphQL.query != inspectRepositoryQuery || graphQL.variables["owner"] != "Actions" ||
 		graphQL.variables["name"] != "Checkout" ||
-		graphQL.variables["actionYml"] != "0123456789abcdef0123456789abcdef01234567:action.yml" ||
-		graphQL.variables["actionYaml"] != "0123456789abcdef0123456789abcdef01234567:action.yaml" {
+		graphQL.variables["actionYml"] != "0123456789abcdef0123456789abcdef01234567:sub/action/action.yml" ||
+		graphQL.variables["actionYaml"] != "0123456789abcdef0123456789abcdef01234567:sub/action/action.yaml" {
 		t.Fatalf("query=%q variables=%#v", graphQL.query, graphQL.variables)
 	}
-	if inspection.Action != "actions/checkout" || inspection.Repository.Description == nil ||
-		*inspection.Repository.Description != "Checkout a Git repository" ||
-		inspection.Repository.URL != "https://github.com/actions/checkout" ||
-		!inspection.Repository.Archived {
+	if inspection.Repository != (actions.Repository{Owner: "actions", Name: "checkout"}) ||
+		inspection.Details.Description == nil ||
+		*inspection.Details.Description != "Checkout a Git repository" ||
+		inspection.Details.URL != "https://github.com/actions/checkout" ||
+		!inspection.Details.Archived {
 		t.Fatalf("unexpected repository: %#v", inspection)
 	}
-	if inspection.Repository.Owner.Login != "actions" || inspection.Repository.Owner.Type != "Organization" ||
-		inspection.Repository.License == nil || inspection.Repository.License.SPDXID != "MIT" {
+	if inspection.Details.Owner.Login != "actions" || inspection.Details.Owner.Type != "Organization" ||
+		inspection.Details.License == nil || inspection.Details.License.SPDXID != "MIT" {
 		t.Fatalf("unexpected owner or license: %#v", inspection)
 	}
 	wantTime := time.Date(2025, time.March, 13, 12, 30, 0, 0, time.UTC)
-	if inspection.Repository.PushedAt == nil || !inspection.Repository.PushedAt.Equal(wantTime) {
-		t.Fatalf("unexpected pushed time: %#v", inspection.Repository.PushedAt)
+	if inspection.Details.PushedAt == nil || !inspection.Details.PushedAt.Equal(wantTime) {
+		t.Fatalf("unexpected pushed time: %#v", inspection.Details.PushedAt)
 	}
-	if inspection.Manifest == nil || inspection.Manifest.Path != "action.yml" ||
+	if inspection.Manifest == nil || inspection.Manifest.Path != "sub/action/action.yml" ||
 		inspection.Manifest.Content != "name: Checkout\nruns:\n  using: node20\n" {
 		t.Fatalf("unexpected manifest: %#v", inspection.Manifest)
 	}
 }
 
-func TestInspectRepositoryFallsBackToActionYAML(t *testing.T) {
+func TestInspectActionFallsBackToActionYAML(t *testing.T) {
 	graphQL := &fakeGraphQLClient{response: `{
 		"repository": {
 			"nameWithOwner": "owner/action",
@@ -74,22 +84,22 @@ func TestInspectRepositoryFallsBackToActionYAML(t *testing.T) {
 	}`}
 	client := &Client{graphQL: graphQL}
 
-	inspection, err := client.InspectRepository(
+	inspection, err := client.InspectAction(
 		context.Background(),
-		actions.Repository{Owner: "owner", Name: "action"},
+		parseActionIdentifier(t, "owner/action"),
 		"v1.2.3",
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if inspection.Manifest == nil || inspection.Manifest.Path != "action.yaml" ||
-		inspection.Repository.PushedAt != nil || inspection.Repository.License != nil ||
-		inspection.Repository.Description != nil {
+		inspection.Details.PushedAt != nil || inspection.Details.License != nil ||
+		inspection.Details.Description != nil {
 		t.Fatalf("unexpected inspection: %#v", inspection)
 	}
 }
 
-func TestInspectRepositoryAllowsMissingManifest(t *testing.T) {
+func TestInspectActionAllowsMissingManifest(t *testing.T) {
 	graphQL := &fakeGraphQLClient{response: `{
 		"repository": {
 			"nameWithOwner": "owner/repository",
@@ -101,9 +111,9 @@ func TestInspectRepositoryAllowsMissingManifest(t *testing.T) {
 	}`}
 	client := &Client{graphQL: graphQL}
 
-	inspection, err := client.InspectRepository(
+	inspection, err := client.InspectAction(
 		context.Background(),
-		actions.Repository{Owner: "owner", Name: "repository"},
+		parseActionIdentifier(t, "owner/repository/path"),
 		"HEAD",
 	)
 	if err != nil {
@@ -114,7 +124,7 @@ func TestInspectRepositoryAllowsMissingManifest(t *testing.T) {
 	}
 }
 
-func TestInspectRepositoryRejectsUnavailableManifestContent(t *testing.T) {
+func TestInspectActionRejectsUnavailableManifestContent(t *testing.T) {
 	tests := []struct {
 		name string
 		blob string
@@ -123,12 +133,12 @@ func TestInspectRepositoryRejectsUnavailableManifestContent(t *testing.T) {
 		{
 			name: "truncated",
 			blob: `{"__typename":"Blob","text":"name: Test","isTruncated":true}`,
-			want: "action.yml content is truncated",
+			want: "subpath/action.yml content is truncated",
 		},
 		{
 			name: "unavailable",
 			blob: `{"__typename":"Blob","text":null,"isTruncated":false}`,
-			want: "action.yml content is unavailable",
+			want: "subpath/action.yml content is unavailable",
 		},
 	}
 	for _, test := range tests {
@@ -143,9 +153,9 @@ func TestInspectRepositoryRejectsUnavailableManifestContent(t *testing.T) {
 			}`}
 			client := &Client{graphQL: graphQL}
 
-			_, err := client.InspectRepository(
+			_, err := client.InspectAction(
 				context.Background(),
-				actions.Repository{Owner: "owner", Name: "action"},
+				parseActionIdentifier(t, "owner/action/subpath"),
 				"HEAD",
 			)
 			if err == nil || err.Error() != test.want {
@@ -155,7 +165,7 @@ func TestInspectRepositoryRejectsUnavailableManifestContent(t *testing.T) {
 	}
 }
 
-func TestInspectRepositoryRejectsUnavailableActionYAMLContent(t *testing.T) {
+func TestInspectActionRejectsUnavailableActionYAMLContent(t *testing.T) {
 	graphQL := &fakeGraphQLClient{response: `{
 		"repository": {
 			"nameWithOwner": "owner/action",
@@ -166,23 +176,45 @@ func TestInspectRepositoryRejectsUnavailableActionYAMLContent(t *testing.T) {
 	}`}
 	client := &Client{graphQL: graphQL}
 
-	_, err := client.InspectRepository(
+	_, err := client.InspectAction(
 		context.Background(),
-		actions.Repository{Owner: "owner", Name: "action"},
+		parseActionIdentifier(t, "owner/action/subpath"),
 		"HEAD",
 	)
-	if err == nil || err.Error() != "action.yaml content is truncated" {
+	if err == nil || err.Error() != "subpath/action.yaml content is truncated" {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
-func TestInspectRepositoryReportsMissingRepository(t *testing.T) {
+func TestInspectActionRejectsMalformedCanonicalRepository(t *testing.T) {
+	graphQL := &fakeGraphQLClient{response: `{
+		"repository": {
+			"nameWithOwner": "owner/repository/unexpected",
+			"owner": {"login": "owner", "__typename": "User"},
+			"actionYml": null,
+			"actionYaml": null
+		}
+	}`}
+	client := &Client{graphQL: graphQL}
+
+	_, err := client.InspectAction(
+		context.Background(),
+		parseActionIdentifier(t, "owner/repository/subpath"),
+		"HEAD",
+	)
+	want := `parse GitHub repository identity: invalid repository "owner/repository/unexpected": expected owner/repo`
+	if err == nil || err.Error() != want {
+		t.Fatalf("error = %v, want %q", err, want)
+	}
+}
+
+func TestInspectActionReportsMissingRepository(t *testing.T) {
 	graphQL := &fakeGraphQLClient{response: `{"repository": null}`}
 	client := &Client{graphQL: graphQL}
 
-	_, err := client.InspectRepository(
+	_, err := client.InspectAction(
 		context.Background(),
-		actions.Repository{Owner: "owner", Name: "missing"},
+		parseActionIdentifier(t, "owner/missing/subpath"),
 		"HEAD",
 	)
 	if err == nil || err.Error() != "repository owner/missing was not found" {

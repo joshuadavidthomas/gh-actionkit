@@ -15,9 +15,7 @@ type ValidationResult struct {
 	Findings int
 }
 
-type Actionlint struct{}
-
-func (Actionlint) Validate(ctx context.Context, repository string, outputJSON bool, stdout, stderr io.Writer) (ValidationResult, error) {
+func Validate(ctx context.Context, repository string, outputJSON bool, stdout, stderr io.Writer) (ValidationResult, error) {
 	if err := ctx.Err(); err != nil {
 		return ValidationResult{}, err
 	}
@@ -45,24 +43,12 @@ func (Actionlint) Validate(ctx context.Context, repository string, outputJSON bo
 	if err != nil {
 		return ValidationResult{}, err
 	}
-	type lintResult struct {
-		findings []*actionlint.Error
-		err      error
+	findings, err := linter.LintFiles(files, project)
+	if err != nil {
+		return ValidationResult{}, err
 	}
-	result := make(chan lintResult, 1)
-	go func() {
-		findings, err := linter.LintFiles(files, project)
-		result <- lintResult{findings: findings, err: err}
-	}()
-
-	select {
-	case <-ctx.Done():
-		// actionlint has no cancellation API, so the in-flight lint must finish in the background.
-		return ValidationResult{}, ctx.Err()
-	case lint := <-result:
-		if lint.err != nil {
-			return ValidationResult{}, lint.err
-		}
-		return ValidationResult{Files: len(files), Findings: len(lint.findings)}, nil
+	if err := ctx.Err(); err != nil {
+		return ValidationResult{}, err
 	}
+	return ValidationResult{Files: len(files), Findings: len(findings)}, nil
 }
