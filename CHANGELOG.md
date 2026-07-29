@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Replace `check --json` fields `up_to_date` and `update_available` with `status`.
+
 ## [0.4.0]
 
 ### Added

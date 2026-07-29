@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"os/signal"
@@ -18,14 +17,10 @@ func main() {
 	defer stop()
 
 	if err := cli.NewRootCommand(version, bundledSkill, os.Stdout, os.Stderr).ExecuteContext(ctx); err != nil {
-		exitCode := 2
-		var statusError interface{ ExitCode() int }
-		if errors.As(err, &statusError) {
-			exitCode = statusError.ExitCode()
+		if status, ok := cli.ExitStatus(err); ok {
+			os.Exit(status)
 		}
-		if err.Error() != "" {
-			fmt.Fprintln(os.Stderr, err)
-		}
-		os.Exit(exitCode)
+		_, _ = fmt.Fprintln(os.Stderr, cli.FormatErrorForTerminal(err))
+		os.Exit(2)
 	}
 }

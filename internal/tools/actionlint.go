@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"context"
 	"io"
 
 	"github.com/joshuadavidthomas/gh-actionkit/internal/workflow"
@@ -14,9 +15,11 @@ type ValidationResult struct {
 	Findings int
 }
 
-type Actionlint struct{}
+func Validate(ctx context.Context, repository string, outputJSON bool, stdout, stderr io.Writer) (ValidationResult, error) {
+	if err := ctx.Err(); err != nil {
+		return ValidationResult{}, err
+	}
 
-func (Actionlint) Validate(repository string, outputJSON bool, stdout, stderr io.Writer) (ValidationResult, error) {
 	files, err := workflow.FindFiles(repository)
 	if err != nil || len(files) == 0 {
 		return ValidationResult{}, err
@@ -42,6 +45,9 @@ func (Actionlint) Validate(repository string, outputJSON bool, stdout, stderr io
 	}
 	findings, err := linter.LintFiles(files, project)
 	if err != nil {
+		return ValidationResult{}, err
+	}
+	if err := ctx.Err(); err != nil {
 		return ValidationResult{}, err
 	}
 	return ValidationResult{Files: len(files), Findings: len(findings)}, nil

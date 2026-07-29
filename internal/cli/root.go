@@ -3,6 +3,7 @@ package cli
 import (
 	"io"
 
+	"github.com/joshuadavidthomas/gh-actionkit/internal/tools"
 	"github.com/spf13/cobra"
 )
 
@@ -17,12 +18,12 @@ func NewRootCommand(version string, skill []byte, stdout, stderr io.Writer) *cob
 	command.SetOut(stdout)
 	command.SetErr(stderr)
 	command.AddCommand(
-		newVersionCommand(),
-		newSearchCommand(),
-		newInspectCommand(),
-		newLintCommand(),
-		newValidateCommand(),
-		newCheckCommand(),
+		newVersionCommand(lookupVersion),
+		newSearchCommand(searchActions),
+		newInspectCommand(inspectAction),
+		newLintCommand(lintWorkflows),
+		newValidateCommand(tools.Validate),
+		newCheckCommand(checkActions),
 		newSkillCommand(skill),
 	)
 	return command

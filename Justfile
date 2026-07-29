@@ -13,6 +13,9 @@ coverage *ARGS:
 fmt *ARGS='.':
     gofmt -w {{ ARGS }}
 
+fmt-check:
+    @test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
+
 lint *ARGS:
     golangci-lint run {{ ARGS }}
 
@@ -25,10 +28,13 @@ test *ARGS:
 tidy:
     go mod tidy
 
+tidy-check:
+    go mod tidy -diff
+
 vet:
     go vet ./...
 
-check: test lint vet
+check: test lint vet fmt-check tidy-check
 
 install: build
     gh extension install .

@@ -10,20 +10,33 @@ import (
 
 type fakeInspectSource struct {
 	fakeVersionSource
-	inspection    RepositoryInspection
-	inspectErr    error
-	inspectedRefs *[]string
+	inspection       RepositoryInspection
+	inspectErr       error
+	inspectedRefs    *[]string
+	inspectedActions *[]ActionIdentifier
 }
 
-func (f fakeInspectSource) InspectRepository(
+func (f fakeInspectSource) InspectAction(
 	_ context.Context,
-	_ Repository,
+	identifier ActionIdentifier,
 	ref string,
 ) (RepositoryInspection, error) {
+	if f.inspectedActions != nil {
+		*f.inspectedActions = append(*f.inspectedActions, identifier)
+	}
 	if f.inspectedRefs != nil {
 		*f.inspectedRefs = append(*f.inspectedRefs, ref)
 	}
 	return f.inspection, f.inspectErr
+}
+
+func inspectForTest(
+	t testing.TB,
+	source InspectSource,
+	value string,
+) (InspectResult, error) {
+	t.Helper()
+	return NewInspectService(source).Inspect(context.Background(), mustParseIdentifier(t, value))
 }
 
 func TestInspectReturnsRepositoryManifestAndPinnedVersion(t *testing.T) {
@@ -40,8 +53,8 @@ func TestInspectReturnsRepositoryManifestAndPinnedVersion(t *testing.T) {
 		},
 		inspectedRefs: &inspectedRefs,
 		inspection: RepositoryInspection{
-			Action: "actions/checkout",
-			Repository: RepositoryDetails{
+			Repository: Repository{Owner: "actions", Name: "checkout"},
+			Details: RepositoryDetails{
 				Description: &description,
 				URL:         "https://github.com/actions/checkout",
 				Owner:       RepositoryOwner{Login: "actions", Type: "Organization"},
@@ -75,7 +88,7 @@ runs:
 		},
 	}
 
-	result, err := NewInspectService(source).Inspect(context.Background(), "Actions/Checkout")
+	result, err := inspectForTest(t, source, "Actions/Checkout")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,13 +133,45 @@ runs:
 	}
 }
 
+func TestInspectPreservesSubpathInInspectionAndPin(t *testing.T) {
+	latestSHA := "0123456789abcdef0123456789abcdef01234567"
+	var inspectedActions []ActionIdentifier
+	source := fakeInspectSource{
+		fakeVersionSource: fakeVersionSource{
+			release:      "v3.0.0",
+			releaseFound: true,
+			refs:         map[string]string{"v3.0.0": latestSHA},
+		},
+		inspectedActions: &inspectedActions,
+		inspection: RepositoryInspection{
+			Repository: Repository{Owner: "github", Name: "codeql-action"},
+			Manifest:   &ManifestFile{Path: "init/action.yml", Content: "name: Init\nruns:\n  using: node20\n"},
+		},
+	}
+
+	result, err := inspectForTest(t, source, "GitHub/codeql-action/init")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(inspectedActions) != 1 || inspectedActions[0].String() != "GitHub/codeql-action/init" {
+		t.Fatalf("inspected actions = %#v", inspectedActions)
+	}
+	if result.Action != "github/codeql-action/init" || result.Manifest.Path != "init/action.yml" {
+		t.Fatalf("unexpected result: %#v", result)
+	}
+	wantPinned := "uses: github/codeql-action/init@" + latestSHA + " # v3.0.0"
+	if result.PinnedUses == nil || *result.PinnedUses != wantPinned {
+		t.Fatalf("pinned uses = %#v, want %q", result.PinnedUses, wantPinned)
+	}
+}
+
 func TestInspectWithoutVersionsStillReturnsManifest(t *testing.T) {
 	source := fakeInspectSource{inspection: RepositoryInspection{
-		Action:   "owner/action",
-		Manifest: &ManifestFile{Path: "action.yaml", Content: "name: Test\nruns:\n  using: composite\n"},
+		Repository: Repository{Owner: "owner", Name: "action"},
+		Manifest:   &ManifestFile{Path: "action.yaml", Content: "name: Test\nruns:\n  using: composite\n"},
 	}}
 
-	result, err := NewInspectService(source).Inspect(context.Background(), "owner/action")
+	result, err := inspectForTest(t, source, "owner/action")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -149,12 +194,12 @@ func TestInspectLeavesPinnedUsesUnknownForMalformedSHA(t *testing.T) {
 		},
 		inspectedRefs: &inspectedRefs,
 		inspection: RepositoryInspection{
-			Action:   "owner/action",
-			Manifest: &ManifestFile{Path: "action.yml", Content: "name: Test\nruns:\n  using: docker\n"},
+			Repository: Repository{Owner: "owner", Name: "action"},
+			Manifest:   &ManifestFile{Path: "action.yml", Content: "name: Test\nruns:\n  using: docker\n"},
 		},
 	}
 
-	result, err := NewInspectService(source).Inspect(context.Background(), "owner/action")
+	result, err := inspectForTest(t, source, "owner/action")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -168,7 +213,7 @@ func TestInspectLeavesPinnedUsesUnknownForMalformedSHA(t *testing.T) {
 
 func TestInspectAcceptsScalarAliasDefaults(t *testing.T) {
 	source := fakeInspectSource{inspection: RepositoryInspection{
-		Action: "owner/action",
+		Repository: Repository{Owner: "owner", Name: "action"},
 		Manifest: &ManifestFile{Path: "action.yml", Content: `
 name: Test
 defaults:
@@ -181,7 +226,7 @@ runs:
 `},
 	}}
 
-	result, err := NewInspectService(source).Inspect(context.Background(), "owner/action")
+	result, err := inspectForTest(t, source, "owner/action")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -192,11 +237,17 @@ runs:
 }
 
 func TestInspectReportsMissingManifest(t *testing.T) {
-	source := fakeInspectSource{inspection: RepositoryInspection{Action: "owner/action"}}
+	source := fakeInspectSource{inspection: RepositoryInspection{
+		Repository: Repository{Owner: "canonical-owner", Name: "canonical-action"},
+	}}
 
-	_, err := NewInspectService(source).Inspect(context.Background(), "owner/action")
+	_, err := inspectForTest(t, source, "owner/action/subpath")
 	if !errors.Is(err, ErrNoActionManifest) {
 		t.Fatalf("expected missing manifest error, got %v", err)
+	}
+	want := "inspect canonical-owner/canonical-action/subpath at HEAD: subpath/action.yml or subpath/action.yaml: action manifest not found"
+	if err.Error() != want {
+		t.Fatalf("error = %q, want %q", err, want)
 	}
 }
 
@@ -206,22 +257,30 @@ func TestInspectReportsManifestErrors(t *testing.T) {
 		content string
 		want    string
 	}{
-		{name: "invalid YAML", content: "name: [", want: "parse action.yml for owner/action"},
-		{name: "missing runtime", content: "name: Test\n", want: "runs.using is required"},
+		{
+			name:    "invalid YAML",
+			content: "name: [",
+			want:    "parse subpath/action.yml for owner/action/subpath",
+		},
+		{
+			name:    "missing runtime",
+			content: "name: Test\n",
+			want:    "parse subpath/action.yml for owner/action/subpath: runs.using is required",
+		},
 		{
 			name:    "structured default",
 			content: "name: Test\ninputs:\n  options:\n    default: [one, two]\nruns:\n  using: composite\n",
-			want:    "input options default: must be a scalar value",
+			want:    "parse subpath/action.yml for owner/action/subpath: input options default: must be a scalar value",
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			source := fakeInspectSource{inspection: RepositoryInspection{
-				Action:   "owner/action",
-				Manifest: &ManifestFile{Path: "action.yml", Content: test.content},
+				Repository: Repository{Owner: "owner", Name: "action"},
+				Manifest:   &ManifestFile{Path: "subpath/action.yml", Content: test.content},
 			}}
 
-			_, err := NewInspectService(source).Inspect(context.Background(), "owner/action")
+			_, err := inspectForTest(t, source, "Owner/Action/subpath")
 			if err == nil || !strings.Contains(err.Error(), test.want) {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -237,7 +296,7 @@ func TestInspectStopsWhenVersionLookupFails(t *testing.T) {
 		inspectedRefs:     &inspectedRefs,
 	}
 
-	_, err := NewInspectService(source).Inspect(context.Background(), "owner/action")
+	_, err := inspectForTest(t, source, "owner/action")
 	if !errors.Is(err, sourceErr) {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -250,8 +309,8 @@ func TestInspectReportsSourceErrors(t *testing.T) {
 	sourceErr := errors.New("rate limited")
 	source := fakeInspectSource{inspectErr: sourceErr}
 
-	_, err := NewInspectService(source).Inspect(context.Background(), "owner/action")
-	if !errors.Is(err, sourceErr) || !strings.Contains(err.Error(), "inspect repository owner/action") {
+	_, err := inspectForTest(t, source, "owner/action")
+	if !errors.Is(err, sourceErr) || !strings.Contains(err.Error(), "inspect action owner/action") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

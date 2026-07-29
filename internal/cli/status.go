@@ -1,15 +1,23 @@
 package cli
 
-// StatusError asks main to return a command-specific process status without
-// printing another error after a child tool has already written its output.
-type StatusError struct {
-	Code int
+import (
+	"errors"
+	"fmt"
+)
+
+// exitStatusError asks main to preserve a command-specific process status
+// without printing another error after the command has written its output.
+type exitStatusError int
+
+func (e exitStatusError) Error() string {
+	return fmt.Sprintf("command exited with status %d", e)
 }
 
-func (e StatusError) Error() string {
-	return ""
-}
-
-func (e StatusError) ExitCode() int {
-	return e.Code
+// ExitStatus reports a command-specific status after the command has written its output.
+func ExitStatus(err error) (int, bool) {
+	var status exitStatusError
+	if !errors.As(err, &status) {
+		return 0, false
+	}
+	return int(status), true
 }

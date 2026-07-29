@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,53 +11,63 @@ import (
 	"github.com/spf13/cobra"
 )
 
-type versionLookup func(context.Context, string) (actions.VersionInfo, error)
+type versionLookup func(context.Context, actions.Repository) (actions.RepositoryVersions, error)
 
-func newVersionCommand() *cobra.Command {
-	return newVersionCommandWithLookup(lookupVersion)
+type versionOutput struct {
+	Action string          `json:"action"`
+	Major  actions.Version `json:"major"`
+	Latest actions.Version `json:"latest"`
 }
 
-func lookupVersion(ctx context.Context, action string) (actions.VersionInfo, error) {
+func lookupVersion(ctx context.Context, repository actions.Repository) (actions.RepositoryVersions, error) {
 	client, err := githubapi.New()
 	if err != nil {
-		return actions.VersionInfo{}, fmt.Errorf("connect to GitHub: %w", err)
+		return actions.RepositoryVersions{}, fmt.Errorf("connect to GitHub: %w", err)
 	}
-	return actions.NewVersionService(client).Lookup(ctx, action)
+	return actions.NewVersionService(client).Lookup(ctx, repository)
 }
 
-func newVersionCommandWithLookup(lookup versionLookup) *cobra.Command {
+func newVersionCommand(lookup versionLookup) *cobra.Command {
 	var outputJSON bool
 	var outputSnippet bool
 	command := &cobra.Command{
-		Use:   "version OWNER/REPO",
+		Use:   "version OWNER/REPO[/PATH]",
 		Short: "Show the latest stable version of a GitHub Action",
 		Long:  "Show the latest stable release, major tag, and commit SHAs for pinning a GitHub Action.",
 		Example: "  gh actionkit version actions/checkout\n" +
-			"  gh actionkit version actions/checkout --snippet\n" +
+			"  gh actionkit version github/codeql-action/init --snippet\n" +
 			"  gh actionkit version actions/checkout --json",
 		Args: cobra.ExactArgs(1),
 		RunE: func(command *cobra.Command, args []string) error {
+			identifier, err := actions.ParseActionIdentifier(args[0])
+			if err != nil {
+				return err
+			}
 			indicator := startCommandSpinner(
 				command.OutOrStdout(),
 				command.ErrOrStderr(),
 				outputJSON,
 				"Fetching action version...",
 			)
-			defer indicator.Stop()
-			info, err := lookup(command.Context(), args[0])
+			versions, err := lookup(command.Context(), identifier.Repository())
 			indicator.Stop()
 			if err != nil {
 				return err
 			}
+			result := versionOutput{
+				Action: identifier.String(),
+				Major:  versions.Major,
+				Latest: versions.Latest,
+			}
 			if outputJSON {
 				encoder := json.NewEncoder(command.OutOrStdout())
 				encoder.SetIndent("", "  ")
-				return encoder.Encode(info)
+				return encoder.Encode(result)
 			}
 			if outputSnippet {
-				return writeVersionSnippet(command.OutOrStdout(), info)
+				return writeVersionSnippet(command.OutOrStdout(), result)
 			}
-			return writeVersion(command.OutOrStdout(), info)
+			return writeVersion(command.OutOrStdout(), result)
 		},
 	}
 	command.Flags().BoolVar(&outputJSON, "json", false, "output JSON")
@@ -67,8 +76,8 @@ func newVersionCommandWithLookup(lookup versionLookup) *cobra.Command {
 	return command
 }
 
-func writeVersionSnippet(output io.Writer, info actions.VersionInfo) error {
-	if info.Latest.SHA == nil || !isFullCommitSHA(*info.Latest.SHA) {
+func writeVersionSnippet(output io.Writer, info versionOutput) error {
+	if info.Latest.SHA == nil || !actions.IsCommitSHA(*info.Latest.SHA) {
 		return fmt.Errorf(
 			"cannot write snippet for %s: tag %s does not resolve to a full commit SHA",
 			info.Action,
@@ -79,15 +88,7 @@ func writeVersionSnippet(output io.Writer, info actions.VersionInfo) error {
 	return err
 }
 
-func isFullCommitSHA(value string) bool {
-	if len(value) != 40 {
-		return false
-	}
-	_, err := hex.DecodeString(value)
-	return err == nil
-}
-
-func writeVersion(output io.Writer, info actions.VersionInfo) error {
+func writeVersion(output io.Writer, info versionOutput) error {
 	renderer := newOutputRenderer(output)
 	styles := newOutputStyles(renderer)
 	actionStyle := styles.action.Bold(true)

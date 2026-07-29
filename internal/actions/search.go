@@ -48,12 +48,5 @@ func (s SearchService) Search(ctx context.Context, query string, limit int) ([]S
 	if err != nil {
 		return nil, fmt.Errorf("search repositories: %w", err)
 	}
-	return take(results, limit), nil
-}
-
-func take(results []SearchResult, limit int) []SearchResult {
-	if len(results) <= limit {
-		return results
-	}
-	return results[:limit]
+	return results, nil
 }

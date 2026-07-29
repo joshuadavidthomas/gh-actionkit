@@ -12,30 +12,32 @@ import (
 	"github.com/spf13/cobra"
 )
 
-type actionCheck func(context.Context, string) (actions.CheckReport, error)
-
-func newCheckCommand() *cobra.Command {
-	return newCheckCommandWithCheck(checkActions)
+type checkReport struct {
+	WorkflowFiles int
+	Uses          int
+	Results       []actions.CheckResult
 }
 
-func checkActions(ctx context.Context, repository string) (actions.CheckReport, error) {
+type actionCheck func(context.Context, string) (checkReport, error)
+
+func checkActions(ctx context.Context, repository string) (checkReport, error) {
 	scan, err := workflow.ScanRepository(repository)
 	if err != nil {
-		return actions.CheckReport{}, err
+		return checkReport{}, err
 	}
-	report := actions.CheckReport{WorkflowFiles: scan.Files, Uses: len(scan.Uses), Results: []actions.CheckResult{}}
+	report := checkReport{WorkflowFiles: scan.Files, Uses: len(scan.Uses), Results: []actions.CheckResult{}}
 	if len(scan.Uses) == 0 {
 		return report, nil
 	}
 	client, err := githubapi.New()
 	if err != nil {
-		return actions.CheckReport{}, fmt.Errorf("connect to GitHub: %w", err)
+		return checkReport{}, fmt.Errorf("connect to GitHub: %w", err)
 	}
 	report.Results, err = actions.NewCheckService(client).Check(ctx, scan.Uses)
 	return report, err
 }
 
-func newCheckCommandWithCheck(check actionCheck) *cobra.Command {
+func newCheckCommand(check actionCheck) *cobra.Command {
 	var repository string
 	var outputJSON bool
 	var requireSHA bool
@@ -62,13 +64,12 @@ func newCheckCommandWithCheck(check actionCheck) *cobra.Command {
 				outputJSON,
 				"Checking action versions...",
 			)
-			defer indicator.Stop()
 			report, err := check(command.Context(), repositoryPath)
 			indicator.Stop()
 			if err != nil {
 				return err
 			}
-			report.Results = actions.ApplyCheckPolicy(report.Results, actions.CheckPolicy{
+			actions.ApplyCheckPolicy(report.Results, actions.CheckPolicy{
 				RequireSHA:    requireSHA,
 				FailOnUnknown: failOnUnknown,
 				AllowedOwners: allowedOwners,
@@ -93,8 +94,8 @@ func newCheckCommandWithCheck(check actionCheck) *cobra.Command {
 				return err
 			}
 			for _, result := range report.Results {
-				if result.UpdateAvailable || len(result.PolicyViolations) > 0 {
-					return StatusError{Code: 1}
+				if result.Status == actions.CheckStatusUpdateAvailable || len(result.PolicyViolations) > 0 {
+					return exitStatusError(1)
 				}
 			}
 			return nil
@@ -108,7 +109,7 @@ func newCheckCommandWithCheck(check actionCheck) *cobra.Command {
 	return command
 }
 
-func checkEmptyMessage(report actions.CheckReport) string {
+func checkEmptyMessage(report checkReport) string {
 	switch {
 	case report.WorkflowFiles == 0:
 		return "No workflow files found in .github/workflows"

@@ -13,38 +13,37 @@ import (
 	"github.com/spf13/cobra"
 )
 
-type actionInspect func(context.Context, string) (actions.InspectResult, error)
+type actionInspect func(context.Context, actions.ActionIdentifier) (actions.InspectResult, error)
 
-func newInspectCommand() *cobra.Command {
-	return newInspectCommandWithInspect(inspectAction)
-}
-
-func inspectAction(ctx context.Context, action string) (actions.InspectResult, error) {
+func inspectAction(ctx context.Context, identifier actions.ActionIdentifier) (actions.InspectResult, error) {
 	client, err := githubapi.New()
 	if err != nil {
 		return actions.InspectResult{}, fmt.Errorf("connect to GitHub: %w", err)
 	}
-	return actions.NewInspectService(client).Inspect(ctx, action)
+	return actions.NewInspectService(client).Inspect(ctx, identifier)
 }
 
-func newInspectCommandWithInspect(inspect actionInspect) *cobra.Command {
+func newInspectCommand(inspect actionInspect) *cobra.Command {
 	var outputJSON bool
 	command := &cobra.Command{
-		Use:   "inspect OWNER/REPO",
+		Use:   "inspect OWNER/REPO[/PATH]",
 		Short: "Inspect a GitHub Action",
 		Long:  "Show repository, manifest, input, output, runtime, and stable version details for a GitHub Action.",
 		Example: "  gh actionkit inspect actions/checkout\n" +
-			"  gh actionkit inspect actions/checkout --json",
+			"  gh actionkit inspect github/codeql-action/init --json",
 		Args: cobra.ExactArgs(1),
 		RunE: func(command *cobra.Command, args []string) error {
+			identifier, err := actions.ParseActionIdentifier(args[0])
+			if err != nil {
+				return err
+			}
 			indicator := startCommandSpinner(
 				command.OutOrStdout(),
 				command.ErrOrStderr(),
 				outputJSON,
 				"Inspecting action...",
 			)
-			defer indicator.Stop()
-			result, err := inspect(command.Context(), args[0])
+			result, err := inspect(command.Context(), identifier)
 			indicator.Stop()
 			if err != nil {
 				return err
@@ -67,13 +66,13 @@ func writeInspection(output io.Writer, result actions.InspectResult) error {
 	actionStyle := styles.action.Bold(true)
 	sectionStyle := renderer.NewStyle().Bold(true)
 
-	if _, err := fmt.Fprintln(output, actionStyle.Render(result.Action)); err != nil {
+	if _, err := fmt.Fprintln(output, actionStyle.Render(sanitizeTerminalLine(result.Action))); err != nil {
 		return err
 	}
 	if _, err := fmt.Fprintf(output, "  %s\n", sectionStyle.Render("repository")); err != nil {
 		return err
 	}
-	if err := writeInspectionField(output, styles, "owner", formatOwner(result.Repository.Owner)); err != nil {
+	if err := writeInspectionField(output, styles, "owner", sanitizeTerminalLine(formatOwner(result.Repository.Owner))); err != nil {
 		return err
 	}
 	if err := writeInspectionField(output, styles, "archived", fmt.Sprint(result.Repository.Archived)); err != nil {
@@ -88,15 +87,15 @@ func writeInspection(output io.Writer, result actions.InspectResult) error {
 	}
 	license := "unknown"
 	if result.Repository.License != nil {
-		license = result.Repository.License.SPDXID
+		license = sanitizeTerminalLine(result.Repository.License.SPDXID)
 		if license == "" {
-			license = result.Repository.License.Name
+			license = sanitizeTerminalLine(result.Repository.License.Name)
 		}
 	}
 	if err := writeInspectionField(output, styles, "license", license); err != nil {
 		return err
 	}
-	if err := writeInspectionField(output, styles, "url", result.Repository.URL); err != nil {
+	if err := writeInspectionField(output, styles, "url", sanitizeTerminalLine(result.Repository.URL)); err != nil {
 		return err
 	}
 	if result.Repository.Description != nil && *result.Repository.Description != "" {
@@ -109,11 +108,11 @@ func writeInspection(output io.Writer, result actions.InspectResult) error {
 		return err
 	}
 	for _, field := range [][2]string{
-		{"path", result.Manifest.Path},
-		{"ref", result.Manifest.Ref},
-		{"name", result.Manifest.Name},
+		{"path", sanitizeTerminalLine(result.Manifest.Path)},
+		{"ref", sanitizeTerminalLine(result.Manifest.Ref)},
+		{"name", sanitizeTerminalLine(result.Manifest.Name)},
 		{"description", result.Manifest.Description},
-		{"runtime", result.Manifest.Runtime},
+		{"runtime", sanitizeTerminalLine(result.Manifest.Runtime)},
 	} {
 		if err := writeInspectionField(output, styles, field[0], field[1]); err != nil {
 			return err
@@ -134,13 +133,9 @@ func writeInspection(output io.Writer, result actions.InspectResult) error {
 			details = "required"
 		}
 		if input.Default != nil {
-			defaultValue := *input.Default
-			if strings.Contains(defaultValue, "\n") {
-				defaultValue = strings.ReplaceAll(defaultValue, "\n", `\n`)
-			}
-			details += ", default: " + defaultValue
+			details += ", default: " + sanitizeTerminalLine(*input.Default)
 		}
-		if _, err := fmt.Fprintf(output, "    %s (%s)\n", input.Name, details); err != nil {
+		if _, err := fmt.Fprintf(output, "    %s (%s)\n", sanitizeTerminalLine(input.Name), details); err != nil {
 			return err
 		}
 		if input.Description != nil && *input.Description != "" {
@@ -159,7 +154,7 @@ func writeInspection(output io.Writer, result actions.InspectResult) error {
 		}
 	}
 	for _, actionOutput := range result.Manifest.Outputs {
-		if _, err := fmt.Fprintf(output, "    %s\n", actionOutput.Name); err != nil {
+		if _, err := fmt.Fprintf(output, "    %s\n", sanitizeTerminalLine(actionOutput.Name)); err != nil {
 			return err
 		}
 		if actionOutput.Description != nil && *actionOutput.Description != "" {
@@ -175,18 +170,18 @@ func writeInspection(output io.Writer, result actions.InspectResult) error {
 	if result.Latest == nil {
 		return writeInspectionField(output, styles, "version", "unknown")
 	}
-	if err := writeInspectionField(output, styles, "tag", result.Latest.Tag); err != nil {
+	if err := writeInspectionField(output, styles, "tag", sanitizeTerminalLine(result.Latest.Tag)); err != nil {
 		return err
 	}
 	sha := "unknown"
 	if result.Latest.SHA != nil {
-		sha = *result.Latest.SHA
+		sha = sanitizeTerminalLine(*result.Latest.SHA)
 	}
 	if err := writeInspectionField(output, styles, "sha", sha); err != nil {
 		return err
 	}
 	if result.PinnedUses != nil {
-		_, err := fmt.Fprintf(output, "    %s\n", *result.PinnedUses)
+		_, err := fmt.Fprintf(output, "    %s\n", sanitizeTerminalLine(*result.PinnedUses))
 		return err
 	}
 	return nil
@@ -203,7 +198,7 @@ func writeInspectionField(output io.Writer, styles outputStyles, label, value st
 }
 
 func indentInspectionText(value, indentation string) string {
-	return strings.ReplaceAll(strings.TrimSpace(value), "\n", "\n"+indentation)
+	return strings.ReplaceAll(strings.TrimSpace(sanitizeTerminal(value)), "\n", "\n"+indentation)
 }
 
 func formatOwner(owner actions.RepositoryOwner) string {

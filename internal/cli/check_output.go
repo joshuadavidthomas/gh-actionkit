@@ -110,13 +110,15 @@ func formatCheckLocations(result actions.CheckResult) string {
 
 func formatCheckStatus(styles checkOutputStyles, result actions.CheckResult) string {
 	var status string
-	switch {
-	case result.UpToDate:
+	switch result.Status {
+	case actions.CheckStatusUpToDate:
 		status = styles.success.Render("up to date")
-	case result.UpdateAvailable:
+	case actions.CheckStatusUpdateAvailable:
 		status = styles.danger.Render("update available")
-	default:
+	case actions.CheckStatusUnknown:
 		status = styles.unknown.Render("unknown")
+	default:
+		status = styles.unknown.Render(string(result.Status))
 	}
 	for _, violation := range result.PolicyViolations {
 		switch violation {

@@ -42,7 +42,7 @@ pre-commit run validate --all-files
 
 ## Agent skill
 
-The [`gh-actionkit` agent skill](skills/gh-actionkit/SKILL.md) teaches coding agents how to find, pin, check, lint, and validate GitHub Actions. It requires gh-actionkit v0.3.0 or newer. Agents check the installed version and upgrade older extensions before using commands introduced in newer releases. Install the skill with any Agent Skills-compatible client.
+The [`gh-actionkit` agent skill](skills/gh-actionkit/SKILL.md) teaches coding agents how to find, pin, check, lint, and validate GitHub Actions. It requires gh-actionkit v0.5.0 or newer. Agents check the installed version and upgrade older extensions before using commands introduced in newer releases. Install the skill with any Agent Skills-compatible client.
 
 With [dotagents](https://github.com/getsentry/dotagents), initialize the target project once, then add the skill:
 
@@ -68,9 +68,9 @@ claude plugin install gh-actionkit@gh-actionkit
 
 | Command | Purpose |
 | --- | --- |
-| `version OWNER/REPO` | Show the latest stable release, major tag, and commit SHAs |
+| `version OWNER/REPO[/PATH]` | Show the repository's latest stable release, major tag, and commit SHAs |
 | `search QUERY` | Find repositories that contain a root Action manifest |
-| `inspect OWNER/REPO` | Show repository, manifest, runtime, input, output, and stable version details |
+| `inspect OWNER/REPO[/PATH]` | Show repository, manifest, runtime, input, output, and stable version details |
 | `check` | Find outdated Action refs in a repository's workflows |
 | `lint` | Audit workflows with zizmor |
 | `validate` | Validate workflow syntax with the embedded actionlint library |
@@ -89,11 +89,11 @@ gh actionkit skill > SKILL.md
 
 ```console
 gh actionkit version actions/checkout
-gh actionkit version actions/checkout --snippet
+gh actionkit version github/codeql-action/init --snippet
 gh actionkit version actions/checkout --json
 ```
 
-Use `--snippet` to print a copy-ready `uses:` line pinned to the latest stable release's full commit SHA.
+An Action identifier has the form `OWNER/REPO[/PATH...]`, where `PATH` names the directory that contains the manifest. `version` resolves releases and tags for the repository and keeps the full identifier in its output; it does not check whether a subpath has a manifest. Use `--snippet` to print a copy-ready `uses:` line pinned to the latest stable release's full commit SHA.
 
 ### Search for Actions
 
@@ -103,16 +103,16 @@ gh actionkit search checkout --limit 5
 gh actionkit search checkout --json
 ```
 
-ActionKit verifies that each result has an `action.yml` or `action.yaml` file.
+ActionKit verifies that each result has a root `action.yml` or `action.yaml` file. Search does not discover Actions in subdirectories.
 
 ### Inspect an Action
 
 ```console
 gh actionkit inspect actions/checkout
-gh actionkit inspect actions/checkout --json
+gh actionkit inspect github/codeql-action/init --json
 ```
 
-`inspect` shows repository ownership and maintenance facts, then parses the root Action manifest at the latest stable release. The manifest ref appears in both output formats. When that release resolves to a full commit SHA, the output includes a copy-ready pinned `uses:` line. Repositories without releases or tags are inspected at `HEAD`.
+`inspect` shows repository ownership and maintenance facts, then parses `action.yml` or `action.yaml` in the named Action directory at the latest stable release. It prefers `action.yml` and does not fall back to the repository root when a subpath has no manifest. The full manifest path and ref appear in both output formats. When that release resolves to a full commit SHA, the output includes a copy-ready pinned `uses:` line with the requested subpath. Repositories without releases or tags are inspected at `HEAD`.
 
 ### Check a repository
 

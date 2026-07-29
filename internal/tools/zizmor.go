@@ -12,30 +12,24 @@ import (
 	"github.com/cli/safeexec"
 )
 
-type Command struct {
-	Path     string
-	Args     []string
-	Dir      string
-	Env      []string
-	UnsetEnv []string
-	Stdout   io.Writer
-	Stderr   io.Writer
+type command struct {
+	path     string
+	args     []string
+	dir      string
+	env      []string
+	unsetEnv []string
+	stdout   io.Writer
+	stderr   io.Writer
 }
 
-type Runner interface {
-	Run(context.Context, Command) error
-}
-
-type ExecRunner struct{}
-
-func (ExecRunner) Run(ctx context.Context, command Command) error {
-	process := exec.CommandContext(ctx, command.Path, command.Args...)
-	process.Dir = command.Dir
-	if len(command.Env) > 0 || len(command.UnsetEnv) > 0 {
-		process.Env = commandEnvironment(process.Environ(), command.UnsetEnv, command.Env)
+func runCommand(ctx context.Context, command command) error {
+	process := exec.CommandContext(ctx, command.path, command.args...)
+	process.Dir = command.dir
+	if len(command.env) > 0 || len(command.unsetEnv) > 0 {
+		process.Env = commandEnvironment(process.Environ(), command.unsetEnv, command.env)
 	}
-	process.Stdout = command.Stdout
-	process.Stderr = command.Stderr
+	process.Stdout = command.stdout
+	process.Stderr = command.stderr
 	return process.Run()
 }
 
@@ -65,11 +59,6 @@ type ZizmorOptions struct {
 	GitHub     *GitHubCredentials
 }
 
-type Zizmor struct {
-	runner   Runner
-	lookPath func(string) (string, error)
-}
-
 const uvPythonIndex = "https://pypi.org/simple"
 
 //go:embed requirements.txt
@@ -85,24 +74,32 @@ var zizmorEnvironment = []string{
 	"ZIZMOR_NO_ONLINE_AUDITS",
 }
 
-func NewZizmor() Zizmor {
-	return Zizmor{runner: ExecRunner{}, lookPath: safeexec.LookPath}
-}
-
-func (z Zizmor) Lint(
+func Lint(
 	ctx context.Context,
 	repository string,
 	options ZizmorOptions,
 	stdout io.Writer,
 	stderr io.Writer,
 ) (int, error) {
-	path, err := z.lookPath("zizmor")
+	return lint(ctx, repository, options, stdout, stderr, runCommand, safeexec.LookPath)
+}
+
+func lint(
+	ctx context.Context,
+	repository string,
+	options ZizmorOptions,
+	stdout io.Writer,
+	stderr io.Writer,
+	run func(context.Context, command) error,
+	lookPath func(string) (string, error),
+) (int, error) {
+	path, err := lookPath("zizmor")
 	useUV := false
 	if err != nil {
 		if !errors.Is(err, exec.ErrNotFound) {
 			return 0, fmt.Errorf("find zizmor executable: %w", err)
 		}
-		path, err = z.lookPath("uv")
+		path, err = lookPath("uv")
 		if err != nil {
 			return 0, fmt.Errorf(
 				"zizmor not found and uv fallback unavailable: install zizmor from https://docs.zizmor.sh/installation: %w",
@@ -147,14 +144,14 @@ func (z Zizmor) Lint(
 		}, arguments...)
 	}
 
-	err = z.runner.Run(ctx, Command{
-		Path:     path,
-		Args:     arguments,
-		Dir:      repository,
-		Env:      environment,
-		UnsetEnv: zizmorEnvironment,
-		Stdout:   stdout,
-		Stderr:   stderr,
+	err = run(ctx, command{
+		path:     path,
+		args:     arguments,
+		dir:      repository,
+		env:      environment,
+		unsetEnv: zizmorEnvironment,
+		stdout:   stdout,
+		stderr:   stderr,
 	})
 	if err == nil {
 		return 0, nil

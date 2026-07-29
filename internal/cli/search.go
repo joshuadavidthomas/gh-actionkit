@@ -13,10 +13,6 @@ import (
 
 type actionSearch func(context.Context, string, int) ([]actions.SearchResult, error)
 
-func newSearchCommand() *cobra.Command {
-	return newSearchCommandWithSearch(searchActions)
-}
-
 func searchActions(ctx context.Context, query string, limit int) ([]actions.SearchResult, error) {
 	client, err := githubapi.New()
 	if err != nil {
@@ -25,7 +21,7 @@ func searchActions(ctx context.Context, query string, limit int) ([]actions.Sear
 	return actions.NewSearchService(client).Search(ctx, query, limit)
 }
 
-func newSearchCommandWithSearch(search actionSearch) *cobra.Command {
+func newSearchCommand(search actionSearch) *cobra.Command {
 	var limit int
 	var outputJSON bool
 	command := &cobra.Command{
@@ -42,7 +38,6 @@ func newSearchCommandWithSearch(search actionSearch) *cobra.Command {
 				outputJSON,
 				"Searching GitHub and verifying actions...",
 			)
-			defer indicator.Stop()
 			results, err := search(command.Context(), args[0], limit)
 			indicator.Stop()
 			if err != nil {
@@ -72,11 +67,11 @@ func writeSearchResults(output io.Writer, results []actions.SearchResult) error 
 
 	for _, result := range results {
 		details := styles.secondary.Render(fmt.Sprintf("(⭐ %s)", formatStars(result.Stars)))
-		if _, err := fmt.Fprintf(output, "%s %s\n", actionStyle.Render(result.Action), details); err != nil {
+		if _, err := fmt.Fprintf(output, "%s %s\n", actionStyle.Render(sanitizeTerminalLine(result.Action)), details); err != nil {
 			return err
 		}
 		if result.Description != nil && *result.Description != "" {
-			if _, err := fmt.Fprintf(output, "  %s\n", *result.Description); err != nil {
+			if _, err := fmt.Fprintf(output, "  %s\n", sanitizeTerminalLine(*result.Description)); err != nil {
 				return err
 			}
 		}

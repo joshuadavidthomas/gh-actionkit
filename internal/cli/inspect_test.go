@@ -14,19 +14,21 @@ import (
 
 func TestInspectForwardsActionAndWritesJSON(t *testing.T) {
 	pushedAt := time.Date(2025, time.March, 13, 12, 30, 0, 0, time.UTC)
-	inspect := func(_ context.Context, action string) (actions.InspectResult, error) {
-		if action != "actions/checkout" {
-			t.Fatalf("action = %q", action)
+	inspect := func(_ context.Context, identifier actions.ActionIdentifier) (actions.InspectResult, error) {
+		if identifier.String() != "github/codeql-action/init" ||
+			identifier.Repository() != (actions.Repository{Owner: "github", Name: "codeql-action"}) ||
+			identifier.Path() != "init" {
+			t.Fatalf("identifier = %#v", identifier)
 		}
 		return actions.InspectResult{
-			Action: "actions/checkout",
+			Action: "github/codeql-action/init",
 			Repository: actions.RepositoryDetails{
-				Owner:    actions.RepositoryOwner{Login: "actions", Type: "Organization"},
+				Owner:    actions.RepositoryOwner{Login: "github", Type: "Organization"},
 				PushedAt: &pushedAt,
 				License:  &actions.RepositoryLicense{Name: "MIT License", SPDXID: "MIT"},
 			},
 			Manifest: actions.ActionManifest{
-				Path:    "action.yml",
+				Path:    "init/action.yml",
 				Runtime: "node20",
 				Inputs:  []actions.ManifestInput{},
 				Outputs: []actions.ManifestOutput{},
@@ -36,10 +38,10 @@ func TestInspectForwardsActionAndWritesJSON(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	command := commandForTest(
-		newInspectCommandWithInspect(inspect),
+		newInspectCommand(inspect),
 		&stdout,
 		&stderr,
-		"actions/checkout",
+		"github/codeql-action/init",
 		"--json",
 	)
 
@@ -50,9 +52,9 @@ func TestInspectForwardsActionAndWritesJSON(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
 		t.Fatalf("invalid JSON %q: %v", stdout.String(), err)
 	}
-	if result.Action != "actions/checkout" || result.Manifest.Inputs == nil ||
-		result.Manifest.Outputs == nil || result.Latest != nil || result.PinnedUses != nil ||
-		result.Repository.Owner.Login != "actions" || result.Repository.License == nil {
+	if result.Action != "github/codeql-action/init" || result.Manifest.Path != "init/action.yml" ||
+		result.Manifest.Inputs == nil || result.Manifest.Outputs == nil || result.Latest != nil ||
+		result.PinnedUses != nil || result.Repository.Owner.Login != "github" || result.Repository.License == nil {
 		t.Fatalf("unexpected result: %#v", result)
 	}
 	for _, fragment := range []string{
@@ -77,6 +79,27 @@ func TestInspectForwardsActionAndWritesJSON(t *testing.T) {
 	}
 }
 
+func TestInspectRejectsMalformedIdentifierBeforeLookup(t *testing.T) {
+	called := false
+	inspect := func(context.Context, actions.ActionIdentifier) (actions.InspectResult, error) {
+		called = true
+		return actions.InspectResult{}, nil
+	}
+	command := commandForTest(
+		newInspectCommand(inspect),
+		&bytes.Buffer{},
+		&bytes.Buffer{},
+		"owner/repo/",
+	)
+
+	if err := command.Execute(); err == nil {
+		t.Fatal("expected an error")
+	}
+	if called {
+		t.Fatal("inspect ran for malformed identifier")
+	}
+}
+
 func TestInspectWritesHumanOutput(t *testing.T) {
 	sha := "0123456789abcdef0123456789abcdef01234567"
 	pinnedUses := "uses: actions/checkout@" + sha + " # v4.2.2"
@@ -86,7 +109,7 @@ func TestInspectWritesHumanOutput(t *testing.T) {
 	outputDescription := "Checked out SHA"
 	defaultValue := "${{ github.token }}"
 	multilineDefault := "one\ntwo"
-	inspect := func(context.Context, string) (actions.InspectResult, error) {
+	inspect := func(context.Context, actions.ActionIdentifier) (actions.InspectResult, error) {
 		return actions.InspectResult{
 			Action: "actions/checkout",
 			Repository: actions.RepositoryDetails{
@@ -120,7 +143,7 @@ func TestInspectWritesHumanOutput(t *testing.T) {
 	}
 	var stdout bytes.Buffer
 	command := commandForTest(
-		newInspectCommandWithInspect(inspect),
+		newInspectCommand(inspect),
 		&stdout,
 		&bytes.Buffer{},
 		"actions/checkout",
@@ -154,8 +177,73 @@ func TestInspectWritesHumanOutput(t *testing.T) {
 	}
 }
 
+func TestInspectSanitizesHumanOutputAndPreservesJSON(t *testing.T) {
+	description := "link \x1b]8;;https://evil.example\x07click\x1b]8;;\x07"
+	defaultValue := "evil\x1b[2Jtext"
+	inspect := func(context.Context, actions.ActionIdentifier) (actions.InspectResult, error) {
+		return actions.InspectResult{
+			Action: "owner/evil\x1b[2Jaction",
+			Repository: actions.RepositoryDetails{
+				Owner:       actions.RepositoryOwner{Login: "owner"},
+				Description: &description,
+			},
+			Manifest: actions.ActionManifest{
+				Name:        "Evil",
+				Description: description,
+				Inputs: []actions.ManifestInput{{
+					Name:        "payload",
+					Description: &description,
+					Default:     &defaultValue,
+				}},
+				Outputs: []actions.ManifestOutput{},
+			},
+		}, nil
+	}
+
+	var humanOutput bytes.Buffer
+	humanCommand := commandForTest(
+		newInspectCommand(inspect),
+		&humanOutput,
+		&bytes.Buffer{},
+		"owner/evil",
+	)
+	if err := humanCommand.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if strings.ContainsRune(humanOutput.String(), '\x1b') {
+		t.Fatalf("human output contains untrusted ESC: %q", humanOutput.String())
+	}
+	for _, text := range []string{"owner/evil�[2Jaction", "evil�[2Jtext", "link �]8;;https://evil.example�click�]8;;�"} {
+		if !strings.Contains(humanOutput.String(), text) {
+			t.Errorf("human output does not contain %q: %q", text, humanOutput.String())
+		}
+	}
+
+	var jsonOutput bytes.Buffer
+	jsonCommand := commandForTest(
+		newInspectCommand(inspect),
+		&jsonOutput,
+		&bytes.Buffer{},
+		"owner/evil",
+		"--json",
+	)
+	if err := jsonCommand.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	var result actions.InspectResult
+	if err := json.Unmarshal(jsonOutput.Bytes(), &result); err != nil {
+		t.Fatalf("invalid JSON %q: %v", jsonOutput.String(), err)
+	}
+	if result.Action != "owner/evil\x1b[2Jaction" || result.Manifest.Description != description {
+		t.Fatalf("JSON changed control-character payload: %#v", result)
+	}
+	if result.Manifest.Inputs[0].Default == nil || *result.Manifest.Inputs[0].Default != defaultValue {
+		t.Fatalf("JSON changed default payload: %#v", result.Manifest.Inputs)
+	}
+}
+
 func TestInspectReportsUnknownOptionalValues(t *testing.T) {
-	inspect := func(context.Context, string) (actions.InspectResult, error) {
+	inspect := func(context.Context, actions.ActionIdentifier) (actions.InspectResult, error) {
 		return actions.InspectResult{
 			Action:     "owner/action",
 			Repository: actions.RepositoryDetails{Owner: actions.RepositoryOwner{Login: "owner"}},
@@ -169,7 +257,7 @@ func TestInspectReportsUnknownOptionalValues(t *testing.T) {
 		}, nil
 	}
 	var stdout bytes.Buffer
-	command := commandForTest(newInspectCommandWithInspect(inspect), &stdout, &bytes.Buffer{}, "owner/action")
+	command := commandForTest(newInspectCommand(inspect), &stdout, &bytes.Buffer{}, "owner/action")
 
 	if err := command.Execute(); err != nil {
 		t.Fatal(err)
@@ -183,11 +271,11 @@ func TestInspectReportsUnknownOptionalValues(t *testing.T) {
 
 func TestInspectPropagatesErrors(t *testing.T) {
 	inspectErr := errors.New("authentication failed")
-	inspect := func(context.Context, string) (actions.InspectResult, error) {
+	inspect := func(context.Context, actions.ActionIdentifier) (actions.InspectResult, error) {
 		return actions.InspectResult{}, inspectErr
 	}
 	command := commandForTest(
-		newInspectCommandWithInspect(inspect),
+		newInspectCommand(inspect),
 		&bytes.Buffer{},
 		&bytes.Buffer{},
 		"owner/action",
@@ -199,11 +287,11 @@ func TestInspectPropagatesErrors(t *testing.T) {
 }
 
 func TestInspectPropagatesOutputErrors(t *testing.T) {
-	inspect := func(context.Context, string) (actions.InspectResult, error) {
+	inspect := func(context.Context, actions.ActionIdentifier) (actions.InspectResult, error) {
 		return actions.InspectResult{Action: "owner/action"}, nil
 	}
 	command := commandForTest(
-		newInspectCommandWithInspect(inspect),
+		newInspectCommand(inspect),
 		failingWriter{},
 		&bytes.Buffer{},
 		"owner/action",

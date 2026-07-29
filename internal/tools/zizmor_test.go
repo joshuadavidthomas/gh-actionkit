@@ -10,14 +10,14 @@ import (
 	"testing"
 )
 
-type recordingRunner struct {
-	command Command
+type recordingProcess struct {
+	command command
 	err     error
 }
 
-func (r *recordingRunner) Run(_ context.Context, command Command) error {
-	r.command = command
-	return r.err
+func (p *recordingProcess) run(_ context.Context, command command) error {
+	p.command = command
+	return p.err
 }
 
 type processExitError int
@@ -25,16 +25,13 @@ type processExitError int
 func (e processExitError) Error() string { return "process failed" }
 func (e processExitError) ExitCode() int { return int(e) }
 
-func TestZizmorBuildsCommandAndPreservesExitCode(t *testing.T) {
-	runner := &recordingRunner{err: processExitError(13)}
-	zizmor := Zizmor{
-		runner: runner,
-		lookPath: func(string) (string, error) {
-			return "/usr/bin/zizmor", nil
-		},
+func TestLintBuildsCommandAndPreservesExitCode(t *testing.T) {
+	process := &recordingProcess{err: processExitError(13)}
+	lookPath := func(string) (string, error) {
+		return "/usr/bin/zizmor", nil
 	}
 
-	exitCode, err := zizmor.Lint(
+	exitCode, err := lint(
 		context.Background(),
 		"/repo",
 		ZizmorOptions{
@@ -47,6 +44,8 @@ func TestZizmorBuildsCommandAndPreservesExitCode(t *testing.T) {
 		},
 		io.Discard,
 		io.Discard,
+		process.run,
+		lookPath,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -54,59 +53,53 @@ func TestZizmorBuildsCommandAndPreservesExitCode(t *testing.T) {
 	if exitCode != 13 {
 		t.Fatalf("got exit code %d", exitCode)
 	}
-	if runner.command.Path != "/usr/bin/zizmor" || runner.command.Dir != "/repo" {
-		t.Fatalf("path=%q dir=%q", runner.command.Path, runner.command.Dir)
+	if process.command.path != "/usr/bin/zizmor" || process.command.dir != "/repo" {
+		t.Fatalf("path=%q dir=%q", process.command.path, process.command.dir)
 	}
 	wantArgs := []string{"--collect=workflows", "--no-progress", "--format=json-v1", "--pedantic", "."}
-	if !reflect.DeepEqual(runner.command.Args, wantArgs) {
-		t.Fatalf("got arguments %#v", runner.command.Args)
+	if !reflect.DeepEqual(process.command.args, wantArgs) {
+		t.Fatalf("got arguments %#v", process.command.args)
 	}
 	wantEnv := []string{"GH_HOST=github.example.com", "GH_TOKEN=secret-token"}
-	if !reflect.DeepEqual(runner.command.Env, wantEnv) {
-		t.Fatalf("got environment %#v", runner.command.Env)
+	if !reflect.DeepEqual(process.command.env, wantEnv) {
+		t.Fatalf("got environment %#v", process.command.env)
 	}
-	if !reflect.DeepEqual(runner.command.UnsetEnv, zizmorEnvironment) {
-		t.Fatalf("got environment removals %#v", runner.command.UnsetEnv)
+	if !reflect.DeepEqual(process.command.unsetEnv, zizmorEnvironment) {
+		t.Fatalf("got environment removals %#v", process.command.unsetEnv)
 	}
-	for _, argument := range runner.command.Args {
+	for _, argument := range process.command.args {
 		if argument == "secret-token" {
 			t.Fatal("token must not appear in command arguments")
 		}
 	}
 }
 
-func TestZizmorPreservesCancellation(t *testing.T) {
+func TestLintPreservesCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	runner := &recordingRunner{err: errors.New("process killed")}
-	zizmor := Zizmor{
-		runner: runner,
-		lookPath: func(string) (string, error) {
-			return "/usr/bin/zizmor", nil
-		},
+	process := &recordingProcess{err: errors.New("process killed")}
+	lookPath := func(string) (string, error) {
+		return "/usr/bin/zizmor", nil
 	}
 
-	_, err := zizmor.Lint(ctx, "/repo", ZizmorOptions{}, io.Discard, io.Discard)
+	_, err := lint(ctx, "/repo", ZizmorOptions{}, io.Discard, io.Discard, process.run, lookPath)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
-func TestZizmorFallsBackToUV(t *testing.T) {
-	runner := &recordingRunner{}
+func TestLintFallsBackToUV(t *testing.T) {
+	process := &recordingProcess{}
 	var lookups []string
-	zizmor := Zizmor{
-		runner: runner,
-		lookPath: func(name string) (string, error) {
-			lookups = append(lookups, name)
-			if name == "uv" {
-				return "/usr/bin/uv", nil
-			}
-			return "", exec.ErrNotFound
-		},
+	lookPath := func(name string) (string, error) {
+		lookups = append(lookups, name)
+		if name == "uv" {
+			return "/usr/bin/uv", nil
+		}
+		return "", exec.ErrNotFound
 	}
 
-	exitCode, err := zizmor.Lint(context.Background(), "/repo", ZizmorOptions{}, io.Discard, io.Discard)
+	exitCode, err := lint(context.Background(), "/repo", ZizmorOptions{}, io.Discard, io.Discard, process.run, lookPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -116,41 +109,40 @@ func TestZizmorFallsBackToUV(t *testing.T) {
 	if !reflect.DeepEqual(lookups, []string{"zizmor", "uv"}) {
 		t.Fatalf("got executable lookups %#v", lookups)
 	}
-	if runner.command.Path != "/usr/bin/uv" {
-		t.Fatalf("got command path %q", runner.command.Path)
+	if process.command.path != "/usr/bin/uv" {
+		t.Fatalf("got command path %q", process.command.path)
 	}
 	wantArgs := []string{
 		"tool", "run", "--no-config", "--no-progress", "--default-index", uvPythonIndex,
 		"--from", strings.TrimSpace(zizmorRequirement), "zizmor",
 		"--collect=workflows", "--no-progress", "--offline", ".",
 	}
-	if !reflect.DeepEqual(runner.command.Args, wantArgs) {
-		t.Fatalf("got arguments %#v", runner.command.Args)
+	if !reflect.DeepEqual(process.command.args, wantArgs) {
+		t.Fatalf("got arguments %#v", process.command.args)
 	}
-	if len(runner.command.Env) != 0 || !reflect.DeepEqual(runner.command.UnsetEnv, zizmorEnvironment) {
-		t.Fatalf("unexpected offline environment: %#v", runner.command)
+	if len(process.command.env) != 0 || !reflect.DeepEqual(process.command.unsetEnv, zizmorEnvironment) {
+		t.Fatalf("unexpected offline environment: %#v", process.command)
 	}
 }
 
-func TestZizmorUVFallbackUsesPinnedPackageOnline(t *testing.T) {
-	runner := &recordingRunner{}
-	zizmor := Zizmor{
-		runner: runner,
-		lookPath: func(name string) (string, error) {
-			if name == "uv" {
-				return "/usr/bin/uv", nil
-			}
-			return "", exec.ErrNotFound
-		},
+func TestLintUVFallbackUsesPinnedPackageOnline(t *testing.T) {
+	process := &recordingProcess{}
+	lookPath := func(name string) (string, error) {
+		if name == "uv" {
+			return "/usr/bin/uv", nil
+		}
+		return "", exec.ErrNotFound
 	}
 	credentials := &GitHubCredentials{Host: "github.com", Token: "secret-token"}
 
-	_, err := zizmor.Lint(
+	_, err := lint(
 		context.Background(),
 		"/repo",
 		ZizmorOptions{GitHub: credentials},
 		io.Discard,
 		io.Discard,
+		process.run,
+		lookPath,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -160,12 +152,12 @@ func TestZizmorUVFallbackUsesPinnedPackageOnline(t *testing.T) {
 		"--from", strings.TrimSpace(zizmorRequirement), "zizmor",
 		"--collect=workflows", "--no-progress", ".",
 	}
-	if !reflect.DeepEqual(runner.command.Args, wantArgs) {
-		t.Fatalf("got arguments %#v", runner.command.Args)
+	if !reflect.DeepEqual(process.command.args, wantArgs) {
+		t.Fatalf("got arguments %#v", process.command.args)
 	}
 	wantEnv := []string{"GH_HOST=github.com", "GH_TOKEN=secret-token"}
-	if !reflect.DeepEqual(runner.command.Env, wantEnv) {
-		t.Fatalf("got environment %#v", runner.command.Env)
+	if !reflect.DeepEqual(process.command.env, wantEnv) {
+		t.Fatalf("got environment %#v", process.command.env)
 	}
 }
 
@@ -186,17 +178,14 @@ func TestCommandEnvironmentRemovesSecretsAndModeOverrides(t *testing.T) {
 	}
 }
 
-func TestZizmorReportsMissingExecutableAndFallback(t *testing.T) {
+func TestLintReportsMissingExecutableAndFallback(t *testing.T) {
 	var lookups []string
-	zizmor := Zizmor{
-		runner: &recordingRunner{},
-		lookPath: func(name string) (string, error) {
-			lookups = append(lookups, name)
-			return "", exec.ErrNotFound
-		},
+	lookPath := func(name string) (string, error) {
+		lookups = append(lookups, name)
+		return "", exec.ErrNotFound
 	}
 
-	_, err := zizmor.Lint(context.Background(), "/repo", ZizmorOptions{}, io.Discard, io.Discard)
+	_, err := lint(context.Background(), "/repo", ZizmorOptions{}, io.Discard, io.Discard, (&recordingProcess{}).run, lookPath)
 	if err == nil {
 		t.Fatal("expected an error")
 	}
@@ -205,18 +194,15 @@ func TestZizmorReportsMissingExecutableAndFallback(t *testing.T) {
 	}
 }
 
-func TestZizmorDoesNotHideLookupErrors(t *testing.T) {
+func TestLintDoesNotHideLookupErrors(t *testing.T) {
 	lookupErr := errors.New("permission denied")
 	var lookups []string
-	zizmor := Zizmor{
-		runner: &recordingRunner{},
-		lookPath: func(name string) (string, error) {
-			lookups = append(lookups, name)
-			return "", lookupErr
-		},
+	lookPath := func(name string) (string, error) {
+		lookups = append(lookups, name)
+		return "", lookupErr
 	}
 
-	_, err := zizmor.Lint(context.Background(), "/repo", ZizmorOptions{}, io.Discard, io.Discard)
+	_, err := lint(context.Background(), "/repo", ZizmorOptions{}, io.Discard, io.Discard, (&recordingProcess{}).run, lookPath)
 	if !errors.Is(err, lookupErr) {
 		t.Fatalf("got error %v", err)
 	}
